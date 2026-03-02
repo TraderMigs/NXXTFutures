@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export function LoginPage() {
@@ -48,6 +48,13 @@ export function LoginPage() {
       </div>
 
       <div className="relative w-full max-w-sm">
+        {/* Back button */}
+        <button onClick={() => navigate('/')}
+          className="flex items-center gap-2 mb-6 text-gray-600 hover:text-gray-300 transition-all text-sm"
+          style={{ fontFamily: 'DM Sans' }}>
+          <ArrowLeft className="w-4 h-4" />
+          Back to Home
+        </button>
         {/* Logo */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-6">
@@ -137,6 +144,15 @@ export function LoginPage() {
         <p className="text-center text-gray-700 text-xs mt-6">
           Private use only · NXXTFutures.com
         </p>
+        <div className="text-center mt-4">
+          <span style={{ fontFamily: 'DM Sans', fontSize: '13px', color: '#4B5563' }}>
+            Don&apos;t have an account?{' '}
+          </span>
+          <button onClick={() => navigate('/pricing')}
+            style={{ fontFamily: 'DM Sans', fontSize: '13px', color: '#F59E0B', textDecoration: 'underline' }}>
+            Start here
+          </button>
+        </div>
       </div>
     </div>
   );
