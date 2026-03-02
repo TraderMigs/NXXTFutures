@@ -6,6 +6,8 @@ import { DataAnalysisTab }   from './DataAnalysisTab';
 import { TradeHistoryTab }   from './TradeHistoryTab';
 import { TradingJournalTab } from './TradingJournalTab';
 import { PWAInstallPrompt }  from '../components/PWAInstallPrompt';
+import { UpgradeModal }      from '../components/UpgradeModal';
+import { TierProvider }      from '../contexts/TierContext';
 import { DataAnalysis }      from '../lib/supabase';
 
 type Tab = 'hot-picks' | 'data-analysis' | 'journal' | 'history';
@@ -49,6 +51,7 @@ export function AppShell() {
   const currentTab = TABS.find(t => t.id === activeTab)!;
 
   return (
+    <TierProvider>
     <div className="min-h-screen bg-[#0A0B0D] flex flex-col">
 
       {/* ── Header ──────────────────────────────────────────────────── */}
@@ -198,6 +201,9 @@ export function AppShell() {
 
       {/* PWA Install Prompt */}
       <PWAInstallPrompt />
+      {/* Upgrade Modal */}
+      <UpgradeModal />
     </div>
+    </TierProvider>
   );
 }
