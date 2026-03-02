@@ -83,8 +83,9 @@ function SpaceCanvas() {
         canvas.width * 0.15, canvas.height * 0.3, 0,
         canvas.width * 0.15, canvas.height * 0.3, canvas.width * 0.5
       );
-      grad1.addColorStop(0, 'rgba(245,158,11,0.04)');
-      grad1.addColorStop(1, 'transparent');
+      grad1.addColorStop(0, 'rgba(245,158,11,0.07)');
+      grad1.addColorStop(0.5, 'rgba(245,158,11,0.03)');
+      grad1.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grad1;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -92,9 +93,21 @@ function SpaceCanvas() {
         canvas.width * 0.85, canvas.height * 0.7, 0,
         canvas.width * 0.85, canvas.height * 0.7, canvas.width * 0.4
       );
-      grad2.addColorStop(0, 'rgba(0,212,255,0.03)');
-      grad2.addColorStop(1, 'transparent');
+      grad2.addColorStop(0, 'rgba(0,212,255,0.06)');
+      grad2.addColorStop(0.5, 'rgba(0,212,255,0.02)');
+      grad2.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grad2;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Center deep amber pulse
+      const pulse = 0.5 + 0.5 * Math.sin(frame * 0.008);
+      const grad3 = ctx.createRadialGradient(
+        canvas.width * 0.5, canvas.height * 0.5, 0,
+        canvas.width * 0.5, canvas.height * 0.5, canvas.width * 0.6
+      );
+      grad3.addColorStop(0, `rgba(245,158,11,${0.02 + pulse * 0.02})`);
+      grad3.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad3;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // ── Stars ───────────────────────────────────────────────────────
@@ -109,7 +122,7 @@ function SpaceCanvas() {
       });
 
       // ── Spawn comets ────────────────────────────────────────────────
-      if (frame % 40 === 0 && comets.length < 12) spawnComet();
+      if (frame % 25 === 0 && comets.length < 18) spawnComet();
       if (frame % 90 === 0 && lasers.length < 6) spawnLaser();
 
       // ── Draw lasers ─────────────────────────────────────────────────
@@ -150,19 +163,15 @@ function SpaceCanvas() {
           ? (c.maxLife - c.life) / 20
           : 1;
 
-        // Trail
-        const grad = ctx.createLinearGradient(
-          c.x - c.vx * c.trailLen / c.vx, c.y - c.vy * c.trailLen / c.vx,
-          c.x, c.y
-        );
-        grad.addColorStop(0, 'transparent');
-        grad.addColorStop(1, c.color + Math.round(c.alpha * 80).toString(16).padStart(2, '0'));
+        // Trail - safe gradient avoiding color parse errors
+        const trailX = c.x - c.vx * 15;
+        const trailY = c.y - c.vy * 15;
         ctx.save();
         ctx.globalAlpha = c.alpha * 0.8;
-        ctx.strokeStyle = grad;
+        ctx.strokeStyle = c.color;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(c.x - c.vx * 15, c.y - c.vy * 15);
+        ctx.moveTo(trailX, trailY);
         ctx.lineTo(c.x, c.y);
         ctx.stroke();
 
@@ -550,13 +559,21 @@ export function LandingPage() {
           ))}
           <br />
           {'FUTURE.'.split('').map((ch, i) => (
-            <span key={i} className="hero-letter shimmer-text"
+            <span key={i} className="hero-letter"
               style={{
                 fontFamily: 'Syne',
                 fontWeight: 900,
                 fontSize: 'clamp(52px, 10vw, 120px)',
                 animationDelay: heroReady ? `${0.6 + i * 0.06}s` : '999s',
                 letterSpacing: '-2px',
+                background: 'linear-gradient(90deg, #F59E0B 0%, #FDE68A 30%, #F59E0B 60%, #D97706 100%)',
+                backgroundSize: '200% auto',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                animation: heroReady
+                  ? `heroLetterIn 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards ${0.6 + i * 0.06}s, shimmer 3s linear infinite`
+                  : 'none',
               }}>
               {ch}
             </span>
@@ -568,7 +585,7 @@ export function LandingPage() {
           style={{
             fontFamily: 'DM Sans',
             fontSize: 'clamp(16px, 2.5vw, 20px)',
-            color: 'rgba(148,163,184,0.9)',
+            color: 'rgba(203,213,225,0.95)',
             fontWeight: 300,
             lineHeight: '1.6',
             transitionDelay: '1s',
@@ -608,7 +625,7 @@ export function LandingPage() {
                 <rect x="2" y="5" width="20" height="14" rx="2" />
                 <path d="M2 10h20" />
               </svg>
-              Join Elite — $99/mo
+              Join the Elite
             </span>
           </button>
         </div>
@@ -704,7 +721,7 @@ export function LandingPage() {
                   </div>
                 </div>
 
-                <p style={{ fontFamily: 'DM Sans', fontSize: '14px', color: 'rgba(148,163,184,0.8)', lineHeight: '1.7', marginBottom: '20px' }}>
+                <p style={{ fontFamily: 'DM Sans', fontSize: '14px', color: 'rgba(203,213,225,0.85)', lineHeight: '1.7', marginBottom: '20px' }}>
                   {f.desc}
                 </p>
 
@@ -755,7 +772,7 @@ export function LandingPage() {
                   Built on how<br />
                   <span className="shimmer-text">banks actually trade.</span>
                 </h3>
-                <p style={{ fontFamily: 'DM Sans', fontSize: '15px', color: 'rgba(148,163,184,0.8)', lineHeight: '1.7' }}>
+                <p style={{ fontFamily: 'DM Sans', fontSize: '15px', color: 'rgba(203,213,225,0.85)', lineHeight: '1.7' }}>
                   Smart Money Concepts is the institutional playbook — Order Blocks, Liquidity Sweeps, Fair Value Gaps, Break of Structure. Not lagging indicators. Not RSI crossovers. The actual mechanics behind every major move.
                 </p>
               </div>
@@ -791,7 +808,7 @@ export function LandingPage() {
             <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(36px, 5vw, 64px)', color: 'white', letterSpacing: '-1px' }}>
               One tier. <span className="shimmer-text">All tools.</span>
             </h2>
-            <p style={{ fontFamily: 'DM Sans', color: 'rgba(148,163,184,0.7)', marginTop: '12px', fontSize: '16px' }}>
+            <p style={{ fontFamily: 'DM Sans', color: 'rgba(203,213,225,0.8)', marginTop: '12px', fontSize: '16px' }}>
               No feature-gating. No paywalled analysis.
             </p>
           </div>
@@ -873,7 +890,7 @@ export function LandingPage() {
             Your edge starts<br />
             <span className="shimmer-text">right now.</span>
           </h2>
-          <p style={{ fontFamily: 'DM Sans', fontSize: '18px', color: 'rgba(148,163,184,0.7)', marginBottom: '40px', lineHeight: '1.6' }}>
+          <p style={{ fontFamily: 'DM Sans', fontSize: '18px', color: 'rgba(203,213,225,0.8)', marginBottom: '40px', lineHeight: '1.6' }}>
             Join traders using institutional SMC methodology,<br className="hidden md:block" />
             AI analysis, and a journal that holds them accountable.
           </p>
