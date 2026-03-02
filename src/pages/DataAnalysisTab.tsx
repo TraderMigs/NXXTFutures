@@ -550,7 +550,7 @@ export function DataAnalysisTab() {
 
                   {/* Position sizing */}
                   {sizing && (
-                    <div className="bg-[#111318] border border-amber-500/15 rounded-2xl p-5">
+                    <div className={`bg-[#111318] rounded-2xl p-5 border ${sizing.overBudget ? 'border-red-500/20' : 'border-amber-500/15'}`}>
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-6 h-6 bg-amber-500/10 rounded-lg flex items-center justify-center">
                           <Zap className="w-3.5 h-3.5 text-amber-400" />
@@ -558,12 +558,21 @@ export function DataAnalysisTab() {
                         <span className="font-display font-semibold text-sm text-amber-400">Position Sizing</span>
                         <span className="font-data text-[10px] text-gray-600 ml-auto">{riskPercent}% risk · ${accountBalance.toLocaleString()}</span>
                       </div>
+                      {sizing.overBudget && (
+                        <div className="mb-4 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-2">
+                          <span className="text-red-400 text-base leading-none mt-0.5">⚠️</span>
+                          <div>
+                            <div className="text-sm font-bold text-red-400">Over Budget — 1 contract costs ${sizing.dollarRiskPerContract.toFixed(0)}</div>
+                            <div className="text-xs text-red-400/70 mt-0.5">Your {riskPercent}% risk allows ${sizing.dollarRiskAllowed.toFixed(0)}. Consider the micro version of this contract to stay within budget.</div>
+                          </div>
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { label: 'Contracts',  val: sizing.contracts,                   color: 'text-white',    copy: true  },
-                          { label: 'Dollar Risk', val: `$${sizing.dollarRisk.toFixed(0)}`, color: 'text-red-400',  copy: true  },
-                          { label: 'Margin Est.', val: `~$${sizing.marginEstimate.toLocaleString()}`, color: 'text-gray-400', copy: false },
-                          { label: 'R:R',         val: result.risk_reward,                color: 'text-amber-400', copy: false },
+                          { label: 'Contracts',       val: sizing.contracts,                              color: 'text-white',    copy: true  },
+                          { label: 'Actual Risk',      val: `$${sizing.dollarRisk.toFixed(0)}`,            color: sizing.overBudget ? 'text-red-400' : 'text-amber-400', copy: true },
+                          { label: 'Margin Est.',      val: `~$${sizing.marginEstimate.toLocaleString()}`, color: 'text-gray-400', copy: false },
+                          { label: 'R:R',              val: result.risk_reward,                            color: 'text-amber-400', copy: false },
                         ].map(({ label, val, color, copy }) => (
                           <div key={label} className="bg-[#0A0B0D] rounded-xl p-3">
                             <div className="text-[10px] text-gray-600 mb-1">{label}</div>
@@ -572,6 +581,10 @@ export function DataAnalysisTab() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                      <div className="mt-3 flex justify-between text-xs px-1">
+                        <span className="text-gray-600">Risk per contract</span>
+                        <span className="font-data text-gray-400">${sizing.dollarRiskPerContract.toFixed(0)}</span>
                       </div>
                     </div>
                   )}
