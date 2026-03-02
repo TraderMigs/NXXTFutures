@@ -4,6 +4,8 @@ import {
   Clock, ChevronDown, ChevronUp, BarChart3, Target, Zap,
   Calendar, Filter, RefreshCw, BookOpen, AlertTriangle
 } from 'lucide-react';
+import { useTier } from '../contexts/TierContext';
+import { Lock } from 'lucide-react';
 import { supabase, DataAnalysis } from '../lib/supabase';
 import { formatFuturesPrice, FUTURES_MAP } from '../lib/futuresSymbols';
 
@@ -154,7 +156,7 @@ function AnalysisCard({ analysis, onOutcomeUpdate, onJournalCreate }: {
             {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             Details
           </button>
-          <button onClick={() => onJournalCreate(analysis)}
+          <button onClick={() => isElite ? onJournalCreate(analysis) : triggerUpgrade("Trading Journal")}
             className="flex items-center gap-1.5 px-2.5 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-xs text-cyan-400 hover:bg-cyan-500/15 transition-all">
             <BookOpen className="w-3 h-3" />
             Journal
