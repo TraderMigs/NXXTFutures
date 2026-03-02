@@ -1,16 +1,15 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
-  UploadCloud, X, CheckCircle2, XCircle, Clock, AlertTriangle,
-  Copy, Check, TrendingUp, TrendingDown, Zap, BarChart3, ChevronDown
+  CheckCircle2, XCircle, Clock, AlertTriangle, Upload,
+  Copy, Check, TrendingUp, TrendingDown, Zap, BarChart3,
+  ChevronDown, Search, Download, X, Layers
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { FUTURES_SYMBOLS, formatFuturesPrice, calcContracts, FUTURES_MAP } from '../lib/futuresSymbols';
+import { FUTURES_SYMBOLS, formatFuturesPrice, calcContracts, FUTURES_MAP, FUTURES_CATEGORIES } from '../lib/futuresSymbols';
 import { AccountPanel } from '../components/AccountPanel';
 
 const TIMEFRAMES = [
-  { label: '1 Minute',   value: '1min'  },
-  { label: '5 Minutes',  value: '5min'  },
   { label: '15 Minutes', value: '15min' },
   { label: '30 Minutes', value: '30min' },
   { label: '1 Hour',     value: '1h'    },
@@ -19,6 +18,7 @@ const TIMEFRAMES = [
   { label: 'Weekly',     value: '1week' },
 ];
 
+// ── Copy button ────────────────────────────────────────────────────────────────
 function CopyBtn({ value }: { value: string | number }) {
   const [done, setDone] = useState(false);
   const copy = async () => {
@@ -33,12 +33,15 @@ function CopyBtn({ value }: { value: string | number }) {
   );
 }
 
+// ── Types ──────────────────────────────────────────────────────────────────────
 interface AnalysisResult {
   pair: string;
   timeframe: string;
   direction: 'BUY' | 'SELL';
   confidence: number;
   current_price: number;
+  chart_high: number;
+  chart_low: number;
   entry_zone_min: number;
   entry_zone_max: number;
   tp1: number; tp1_pips: number;
@@ -62,46 +65,176 @@ interface AnalysisResult {
   };
 }
 
+// ── Chart overlay drawing ──────────────────────────────────────────────────────
+function drawOverlay(
+  canvas: HTMLCanvasElement,
+  img: HTMLImageElement,
+  result: AnalysisResult
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  canvas.width  = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+
+  // Draw the original chart image
+  ctx.drawImage(img, 0, 0);
+
+  // ── Estimate chart area within the screenshot ──────────────────────────────
+  // TradingView typical chrome: top toolbar ~50px, bottom axis ~40px, right price axis ~70px
+  const padTop    = Math.round(canvas.height * 0.07);
+  const padBottom = Math.round(canvas.height * 0.07);
+  const padRight  = Math.round(canvas.width  * 0.06);
+  const chartTop    = padTop;
+  const chartBottom = canvas.height - padBottom;
+  const chartLeft   = 0;
+  const chartRight  = canvas.width - padRight;
+  const chartH = chartBottom - chartTop;
+
+  // Use AI-provided chart_high/chart_low if available, else estimate from levels
+  const priceHigh = result.chart_high || Math.max(result.tp3, result.entry_zone_max) * 1.005;
+  const priceLow  = result.chart_low  || Math.min(result.stop_loss, result.entry_zone_min) * 0.995;
+  const priceRange = priceHigh - priceLow;
+  if (priceRange === 0) return;
+
+  // Map price → y pixel
+  const priceToY = (price: number) =>
+    chartTop + ((priceHigh - price) / priceRange) * chartH;
+
+  const lineWidth = Math.max(2, Math.round(canvas.width / 600));
+  const fontSize  = Math.max(11, Math.round(canvas.width / 80));
+  const labelPad  = 8;
+  const labelX    = chartRight + labelPad;
+
+  // ── Helper: draw horizontal line with label ────────────────────────────────
+  const drawLine = (price: number, color: string, label: string, alpha = 0.85, dash: number[] = []) => {
+    const y = priceToY(price);
+    if (y < chartTop - 20 || y > chartBottom + 20) return; // off-screen, skip
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    if (dash.length) ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, y);
+    ctx.lineTo(chartRight, y);
+    ctx.stroke();
+    ctx.restore();
+
+    // Label pill on right edge
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    const labelText = label;
+    ctx.font = `bold ${fontSize}px monospace`;
+    const tw = ctx.measureText(labelText).width;
+    const pillW = tw + labelPad * 2;
+    const pillH = fontSize + labelPad;
+    const pillX = labelX;
+    const pillY = y - pillH / 2;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(pillX, pillY, pillW, pillH, 4);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.fillText(labelText, pillX + labelPad, y + fontSize * 0.35);
+    ctx.restore();
+  };
+
+  // ── Helper: draw filled band ───────────────────────────────────────────────
+  const drawBand = (priceTop: number, priceBot: number, color: string, alpha = 0.18) => {
+    const y1 = priceToY(priceTop);
+    const y2 = priceToY(priceBot);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.fillRect(chartLeft, Math.min(y1, y2), chartRight - chartLeft, Math.abs(y2 - y1));
+    ctx.restore();
+  };
+
+  const isBuy = result.direction === 'BUY';
+  const entryColor = '#00BFFF'; // cyan
+  const slColor    = '#FF4444'; // red
+  const tp1Color   = '#00FF88'; // green
+  const tp2Color   = '#00CC66';
+  const tp3Color   = '#009944';
+  const curColor   = '#FFD700'; // gold
+
+  // Draw in order: bands first, then lines on top
+  // Entry zone band
+  drawBand(result.entry_zone_max, result.entry_zone_min, entryColor, 0.18);
+  // TP bands (very subtle)
+  if (isBuy) {
+    drawBand(result.tp1, result.entry_zone_max, tp1Color, 0.05);
+    drawBand(result.tp2, result.tp1, tp2Color, 0.05);
+    drawBand(result.tp3, result.tp2, tp3Color, 0.05);
+    drawBand(result.entry_zone_min, result.stop_loss, slColor, 0.08);
+  } else {
+    drawBand(result.entry_zone_min, result.tp1, tp1Color, 0.05);
+    drawBand(result.tp1, result.tp2, tp2Color, 0.05);
+    drawBand(result.tp2, result.tp3, tp3Color, 0.05);
+    drawBand(result.stop_loss, result.entry_zone_max, slColor, 0.08);
+  }
+
+  // Draw lines
+  drawLine(result.stop_loss,       slColor,   `SL ${formatFuturesPrice(result.stop_loss, result.pair)}`);
+  drawLine(result.entry_zone_min,  entryColor, `ENTRY ${formatFuturesPrice(result.entry_zone_min, result.pair)}`, 0.7, [6, 4]);
+  drawLine(result.entry_zone_max,  entryColor, `ENTRY ${formatFuturesPrice(result.entry_zone_max, result.pair)}`, 0.7, [6, 4]);
+  drawLine(result.tp1,             tp1Color,  `TP1 ${formatFuturesPrice(result.tp1, result.pair)}`);
+  drawLine(result.tp2,             tp2Color,  `TP2 ${formatFuturesPrice(result.tp2, result.pair)}`);
+  drawLine(result.tp3,             tp3Color,  `TP3 ${formatFuturesPrice(result.tp3, result.pair)}`);
+  drawLine(result.current_price,   curColor,  `NOW ${formatFuturesPrice(result.current_price, result.pair)}`, 1.0, [3, 3]);
+
+  // ── Direction + Confidence badge (top-left) ────────────────────────────────
+  ctx.save();
+  const badgeX = 16, badgeY = 16;
+  const badgeW = 220, badgeH = 52;
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = '#0A0B0D';
+  ctx.beginPath();
+  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 8);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.font = `bold ${fontSize + 4}px monospace`;
+  ctx.fillStyle = isBuy ? '#00FF88' : '#FF4444';
+  ctx.fillText(`${isBuy ? '▲' : '▼'} ${result.direction}  ${result.confidence}%`, badgeX + 12, badgeY + 22);
+  ctx.font = `${fontSize}px monospace`;
+  ctx.fillStyle = '#888';
+  ctx.fillText(`${result.pair} · ${result.timeframe} · R:R ${result.risk_reward}`, badgeX + 12, badgeY + 40);
+  ctx.restore();
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 export function DataAnalysisTab() {
-  const [image, setImage] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [selectedSymbol, setSelectedSymbol] = useState('ES');
+  const [selectedSymbol,    setSelectedSymbol]    = useState('ES');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [symbolDropdownOpen, setSymbolDropdownOpen] = useState(false);
-  const [accountBalance, setAccountBalance] = useState(10000);
-  const [riskPercent, setRiskPercent] = useState(1);
-  const resultRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [loading,           setLoading]           = useState(false);
+  const [error,             setError]             = useState<string | null>(null);
+  const [result,            setResult]            = useState<AnalysisResult | null>(null);
+  const [symbolDropdownOpen,setSymbolDropdownOpen] = useState(false);
+  const [accountBalance,    setAccountBalance]    = useState(10000);
+  const [riskPercent,       setRiskPercent]       = useState(1);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] },
-    maxFiles: 1,
-    onDrop: (files) => {
-      if (files[0]) {
-        setImage(files[0]);
-        setPreview(URL.createObjectURL(files[0]));
-        setResult(null);
-        setError(null);
-      }
-    },
-  });
+  // Overlay state
+  const [overlayImage,     setOverlayImage]     = useState<string | null>(null);
+  const [overlayReady,     setOverlayReady]     = useState(false);
+  const [overlayRendered,  setOverlayRendered]  = useState(false);
 
+  const resultRef    = useRef<HTMLDivElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const dropdownRef  = useRef<HTMLDivElement>(null);
+
+  // ── Analyze ────────────────────────────────────────────────────────────────
   const handleAnalyze = async () => {
-    if (!image) { setError('Please upload a chart image first.'); return; }
     setLoading(true);
     setError(null);
     setResult(null);
+    setOverlayImage(null);
+    setOverlayReady(false);
+    setOverlayRendered(false);
 
     try {
-      const formData = new FormData();
-      formData.append('image', image);
-      formData.append('symbol', selectedSymbol);
-
       const { data, error: fnError } = await supabase.functions.invoke('analyze-chart', {
-        body: formData,
+        body: { symbol: selectedSymbol, timeframe: selectedTimeframe },
       });
 
       if (fnError) throw new Error(fnError.message || 'Analysis failed.');
@@ -116,14 +249,49 @@ export function DataAnalysisTab() {
     }
   };
 
-  // Position sizing for result
-  const entryMid = result ? (result.entry_zone_min + result.entry_zone_max) / 2 : 0;
-  const sizing = result ? calcContracts(accountBalance, riskPercent, entryMid, result.stop_loss, result.pair) : null;
-  const config = result ? FUTURES_MAP[result.pair] : null;
-  const unit = config?.unit || 'points';
+  // ── Chart overlay drop ─────────────────────────────────────────────────────
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] },
+    maxFiles: 1,
+    disabled: !result,
+    onDrop: (files) => {
+      if (files[0] && result) {
+        const url = URL.createObjectURL(files[0]);
+        setOverlayImage(url);
+        setOverlayReady(true);
+        setOverlayRendered(false);
+      }
+    },
+  });
 
-  // Group symbols by category
-  const categories = ['EQUITY INDEX', 'METALS', 'ENERGY', 'AGRICULTURE'];
+  // ── Draw overlay when image is ready ──────────────────────────────────────
+  useEffect(() => {
+    if (!overlayReady || !overlayImage || !result || !canvasRef.current) return;
+
+    const img = new Image();
+    img.onload = () => {
+      if (canvasRef.current) {
+        drawOverlay(canvasRef.current, img, result);
+        setOverlayRendered(true);
+      }
+    };
+    img.src = overlayImage;
+  }, [overlayReady, overlayImage, result]);
+
+  // ── Download annotated chart ───────────────────────────────────────────────
+  const handleDownload = () => {
+    if (!canvasRef.current || !result) return;
+    const link = document.createElement('a');
+    link.download = `${result.pair}_${result.timeframe}_SMC.png`;
+    link.href = canvasRef.current.toDataURL('image/png');
+    link.click();
+  };
+
+  // ── Derived values ─────────────────────────────────────────────────────────
+  const entryMid = result ? (result.entry_zone_min + result.entry_zone_max) / 2 : 0;
+  const sizing   = result ? calcContracts(accountBalance, riskPercent, entryMid, result.stop_loss, result.pair) : null;
+  const config   = result ? FUTURES_MAP[result.pair] : null;
+  const unit     = config?.unit || 'points';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
@@ -133,7 +301,6 @@ export function DataAnalysisTab() {
         <div className="space-y-4">
           <AccountPanel onSettingsChange={(b, r) => { setAccountBalance(b); setRiskPercent(r); }} />
 
-          {/* Upload + Config */}
           <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-5 space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <BarChart3 className="w-4 h-4 text-amber-400" />
@@ -151,36 +318,44 @@ export function DataAnalysisTab() {
                   <span>
                     <span className="font-data font-medium text-amber-400">{selectedSymbol}</span>
                     <span className="text-gray-500 ml-2 text-xs">{FUTURES_MAP[selectedSymbol]?.fullName}</span>
+                    {FUTURES_MAP[selectedSymbol]?.isMicro && (
+                      <span className="ml-1.5 text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">MICRO</span>
+                    )}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${symbolDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {symbolDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-[#111318] border border-[#1E2128] rounded-xl shadow-2xl max-h-64 overflow-y-auto">
-                    {categories.map(cat => (
-                      <div key={cat}>
-                        <div className="px-3 py-1.5 text-[10px] font-bold text-amber-500/70 uppercase tracking-wider bg-[#0A0B0D] sticky top-0">
-                          {cat}
+                  <div className="absolute z-50 w-full mt-1 bg-[#111318] border border-[#1E2128] rounded-xl shadow-2xl max-h-72 overflow-y-auto">
+                    {FUTURES_CATEGORIES.map(cat => {
+                      const symbols = FUTURES_SYMBOLS.filter(s => s.category === cat);
+                      if (!symbols.length) return null;
+                      return (
+                        <div key={cat}>
+                          <div className="px-3 py-1.5 text-[10px] font-bold text-amber-500/70 uppercase tracking-wider bg-[#0A0B0D] sticky top-0">
+                            {cat}
+                          </div>
+                          {symbols.map(s => (
+                            <button
+                              key={s.symbol}
+                              onMouseDown={() => { setSelectedSymbol(s.symbol); setSymbolDropdownOpen(false); }}
+                              className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
+                                selectedSymbol === s.symbol
+                                  ? 'bg-amber-500/10 text-amber-400'
+                                  : 'text-gray-300 hover:bg-white/3'
+                              }`}
+                            >
+                              <span className="flex items-center gap-2">
+                                <span className="font-data font-medium w-10 text-left">{s.symbol}</span>
+                                <span className="text-gray-600 text-xs">{s.fullName}</span>
+                                {s.isMicro && <span className="text-[9px] bg-blue-500/15 text-blue-400 px-1 rounded">μ</span>}
+                              </span>
+                              <span className="text-[10px] text-gray-700">{s.exchange}</span>
+                            </button>
+                          ))}
                         </div>
-                        {FUTURES_SYMBOLS.filter(s => s.category === cat).map(s => (
-                          <button
-                            key={s.symbol}
-                            onMouseDown={() => { setSelectedSymbol(s.symbol); setSymbolDropdownOpen(false); }}
-                            className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
-                              selectedSymbol === s.symbol
-                                ? 'bg-amber-500/10 text-amber-400'
-                                : 'text-gray-300 hover:bg-white/3'
-                            }`}
-                          >
-                            <span>
-                              <span className="font-data font-medium">{s.symbol}</span>
-                              <span className="text-gray-600 text-xs ml-2">{s.fullName}</span>
-                            </span>
-                            <span className="text-[10px] text-gray-700">{s.exchange}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -200,51 +375,21 @@ export function DataAnalysisTab() {
               </select>
             </div>
 
-            {/* Dropzone */}
-            <div>
-              <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 block">Chart Screenshot</label>
-              {!preview ? (
-                <div
-                  {...getRootProps()}
-                  className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
-                    isDragActive
-                      ? 'border-amber-500/50 bg-amber-500/5'
-                      : 'border-[#1E2128] hover:border-amber-500/30 hover:bg-amber-500/3'
-                  }`}
-                >
-                  <input {...getInputProps()} />
-                  <UploadCloud className={`w-8 h-8 mx-auto mb-2 ${isDragActive ? 'text-amber-400' : 'text-gray-700'}`} />
-                  <p className="text-xs text-gray-600">Drop chart here or click to upload</p>
-                  <p className="text-[10px] text-gray-700 mt-1">PNG, JPG, WEBP</p>
-                </div>
-              ) : (
-                <div className="relative">
-                  <img src={preview} alt="Chart" className="w-full rounded-xl border border-[#1E2128] object-cover max-h-48" />
-                  <button
-                    onClick={() => { setImage(null); setPreview(null); setResult(null); }}
-                    className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-lg text-gray-400 hover:text-white transition-all"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-
             {/* Analyze button */}
             <button
               onClick={handleAnalyze}
-              disabled={loading || !image}
+              disabled={loading}
               className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:cursor-not-allowed text-black font-display font-bold text-sm rounded-xl transition-all"
             >
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                  Analyzing...
+                  Analyzing {selectedSymbol}...
                 </>
               ) : (
                 <>
-                  <Zap className="w-4 h-4" />
-                  Analyze Chart
+                  <Search className="w-4 h-4" />
+                  Analyze {selectedSymbol}
                 </>
               )}
             </button>
@@ -256,6 +401,52 @@ export function DataAnalysisTab() {
               </div>
             )}
           </div>
+
+          {/* Chart overlay upload — shows AFTER analysis */}
+          {result && (
+            <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-cyan-400" />
+                <span className="font-display font-semibold text-sm text-white">Mark Up Chart</span>
+                <span className="text-[10px] text-gray-600 ml-auto">optional</span>
+              </div>
+              <p className="text-xs text-gray-600">Upload your TradingView screenshot and levels will be drawn on it.</p>
+
+              {!overlayImage ? (
+                <div
+                  {...getRootProps()}
+                  className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+                    isDragActive
+                      ? 'border-cyan-500/50 bg-cyan-500/5'
+                      : 'border-[#1E2128] hover:border-cyan-500/30 hover:bg-cyan-500/3'
+                  }`}
+                >
+                  <input {...getInputProps()} />
+                  <Upload className={`w-6 h-6 mx-auto mb-1.5 ${isDragActive ? 'text-cyan-400' : 'text-gray-700'}`} />
+                  <p className="text-xs text-gray-600">Drop chart or click to upload</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setOverlayImage(null); setOverlayReady(false); setOverlayRendered(false); }}
+                      className="flex items-center gap-1.5 px-2 py-1 bg-[#0A0B0D] border border-[#1E2128] rounded-lg text-xs text-gray-500 hover:text-gray-300 transition-all"
+                    >
+                      <X className="w-3 h-3" /> Remove
+                    </button>
+                    {overlayRendered && (
+                      <button
+                        onClick={handleDownload}
+                        className="flex items-center gap-1.5 px-2 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-xs text-cyan-400 hover:bg-cyan-500/20 transition-all"
+                      >
+                        <Download className="w-3 h-3" /> Download
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Right: Results ─────────────────────────────────────────── */}
@@ -267,7 +458,7 @@ export function DataAnalysisTab() {
               </div>
               <h3 className="font-display font-semibold text-white mb-2">No analysis yet</h3>
               <p className="text-gray-600 text-sm max-w-xs">
-                Upload a chart screenshot on the left and hit Analyze Chart to get your SMC setup.
+                Select a symbol and timeframe, then hit Analyze to get your SMC setup.
               </p>
             </div>
           )}
@@ -285,7 +476,21 @@ export function DataAnalysisTab() {
           )}
 
           {result && (
-            <div ref={resultRef} className="space-y-4 animate-fade-in">
+            <div ref={resultRef} className="space-y-4">
+
+              {/* Annotated chart canvas */}
+              {overlayImage && (
+                <div className="bg-[#111318] border border-[#1E2128] rounded-2xl overflow-hidden">
+                  <canvas
+                    ref={canvasRef}
+                    className="w-full h-auto block"
+                    style={{ maxHeight: '480px', objectFit: 'contain' }}
+                  />
+                  {!overlayRendered && (
+                    <div className="p-3 text-center text-xs text-gray-600">Drawing levels...</div>
+                  )}
+                </div>
+              )}
 
               {/* Setup status banner */}
               {result.setup_status === 'AT_ENTRY' && (
@@ -316,13 +521,14 @@ export function DataAnalysisTab() {
                 </div>
               )}
 
-              {/* Header */}
+              {/* Header card */}
               <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-5">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-display font-bold text-2xl text-white">{result.pair}</span>
                       <span className="font-data text-xs text-gray-500">{result.timeframe}</span>
+                      {config?.isMicro && <span className="text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">MICRO</span>}
                     </div>
                     <div className="font-data text-xs text-gray-600">
                       {result.higher_tf_used && `HTF: ${result.higher_tf_used}`}
@@ -342,7 +548,6 @@ export function DataAnalysisTab() {
                   </div>
                 </div>
 
-                {/* Gauge */}
                 <div className="mt-3">
                   <div className="w-full h-1.5 bg-[#1E2128] rounded-full overflow-hidden">
                     <div
@@ -366,13 +571,13 @@ export function DataAnalysisTab() {
               {/* Trade levels */}
               <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-5 space-y-2">
                 <div className="font-display font-semibold text-xs text-gray-400 uppercase tracking-wider mb-3">Trade Levels</div>
-
                 {[
-                  { label: 'Entry Zone', value: `${formatFuturesPrice(result.entry_zone_min, result.pair)} – ${formatFuturesPrice(result.entry_zone_max, result.pair)}`, copyVal: formatFuturesPrice(entryMid, result.pair), color: 'text-cyan-400' },
-                  { label: 'Stop Loss', value: `${formatFuturesPrice(result.stop_loss, result.pair)} (${result.sl_pips} ${unit})`, copyVal: formatFuturesPrice(result.stop_loss, result.pair), color: 'text-red-400' },
-                  { label: 'TP1 — Take 50%', value: `${formatFuturesPrice(result.tp1, result.pair)} (+${result.tp1_pips} ${unit})`, copyVal: formatFuturesPrice(result.tp1, result.pair), color: 'text-emerald-400' },
+                  { label: 'Current Price', value: formatFuturesPrice(result.current_price, result.pair), copyVal: formatFuturesPrice(result.current_price, result.pair), color: 'text-yellow-400' },
+                  { label: 'Entry Zone',    value: `${formatFuturesPrice(result.entry_zone_min, result.pair)} – ${formatFuturesPrice(result.entry_zone_max, result.pair)}`, copyVal: formatFuturesPrice(entryMid, result.pair), color: 'text-cyan-400' },
+                  { label: 'Stop Loss',     value: `${formatFuturesPrice(result.stop_loss, result.pair)} (${result.sl_pips} ${unit})`, copyVal: formatFuturesPrice(result.stop_loss, result.pair), color: 'text-red-400' },
+                  { label: 'TP1 — Take 50%',      value: `${formatFuturesPrice(result.tp1, result.pair)} (+${result.tp1_pips} ${unit})`, copyVal: formatFuturesPrice(result.tp1, result.pair), color: 'text-emerald-400' },
                   { label: 'TP2 — Move SL to BE', value: `${formatFuturesPrice(result.tp2, result.pair)} (+${result.tp2_pips} ${unit})`, copyVal: formatFuturesPrice(result.tp2, result.pair), color: 'text-emerald-400' },
-                  { label: 'TP3 — Trail Stop', value: `${formatFuturesPrice(result.tp3, result.pair)} (+${result.tp3_pips} ${unit})`, copyVal: formatFuturesPrice(result.tp3, result.pair), color: 'text-emerald-400' },
+                  { label: 'TP3 — Trail Stop',    value: `${formatFuturesPrice(result.tp3, result.pair)} (+${result.tp3_pips} ${unit})`, copyVal: formatFuturesPrice(result.tp3, result.pair), color: 'text-emerald-400' },
                 ].map(({ label, value, copyVal, color }) => (
                   <div key={label} className="flex items-center justify-between px-3 py-2.5 bg-[#0A0B0D] rounded-xl border border-[#1E2128]">
                     <span className="text-xs text-gray-500">{label}</span>
@@ -382,7 +587,6 @@ export function DataAnalysisTab() {
                     </div>
                   </div>
                 ))}
-
                 <div className="flex items-center justify-between px-3 py-2 bg-[#0A0B0D] rounded-xl border border-[#1E2128]">
                   <span className="text-xs text-gray-500">Risk : Reward</span>
                   <span className="font-data font-semibold text-amber-400">{result.risk_reward}</span>
@@ -401,10 +605,10 @@ export function DataAnalysisTab() {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { label: 'Contracts', val: sizing.contracts, color: 'text-white', copy: true },
-                      { label: 'Dollar Risk', val: `$${sizing.dollarRisk.toFixed(0)}`, color: 'text-red-400', copy: true },
+                      { label: 'Contracts',  val: sizing.contracts,                  color: 'text-white',    copy: true  },
+                      { label: 'Dollar Risk', val: `$${sizing.dollarRisk.toFixed(0)}`, color: 'text-red-400',  copy: true  },
                       { label: 'Margin Est.', val: `~$${sizing.marginEstimate.toLocaleString()}`, color: 'text-gray-400', copy: false },
-                      { label: 'R:R', val: result.risk_reward, color: 'text-amber-400', copy: false },
+                      { label: 'R:R',         val: result.risk_reward,               color: 'text-amber-400', copy: false },
                     ].map(({ label, val, color, copy }) => (
                       <div key={label} className="bg-[#0A0B0D] rounded-xl p-3">
                         <div className="text-[10px] text-gray-600 mb-1">{label}</div>
@@ -418,7 +622,7 @@ export function DataAnalysisTab() {
                 </div>
               )}
 
-              {/* Entry validation */}
+              {/* Key warning */}
               {result.entry_validation?.key_warning && (
                 <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl">
                   <div className="flex items-center gap-2 mb-1">
@@ -429,7 +633,7 @@ export function DataAnalysisTab() {
                 </div>
               )}
 
-              {/* SMC Reasoning */}
+              {/* SMC Analysis */}
               <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-5">
                 <div className="font-display font-semibold text-xs text-amber-500/70 uppercase tracking-wider mb-3">SMC Analysis</div>
                 <div className="space-y-2">
