@@ -9,6 +9,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { FUTURES_SYMBOLS, formatFuturesPrice, calcContracts, FUTURES_MAP, FUTURES_CATEGORIES } from '../lib/futuresSymbols';
 import { AccountPanel } from '../components/AccountPanel';
+import { AnalysisTheater } from '../components/AnalysisTheater';
 
 const TIMEFRAMES = [
   { label: '15 Minutes', value: '15min' },
@@ -423,15 +424,7 @@ export function DataAnalysisTab() {
           )}
 
           {loading && (
-            <div className="space-y-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="bg-[#111318] border border-[#1E2128] rounded-2xl p-6 animate-pulse">
-                  <div className="h-4 bg-[#1E2128] rounded w-1/3 mb-4" />
-                  <div className="h-3 bg-[#1E2128] rounded w-2/3 mb-2" />
-                  <div className="h-3 bg-[#1E2128] rounded w-1/2" />
-                </div>
-              ))}
-            </div>
+            <AnalysisTheater symbol={selectedSymbol} />
           )}
 
           {result && (
