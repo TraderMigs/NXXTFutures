@@ -101,7 +101,7 @@ export function SignalCard({ signal, accountBalance, riskPercent }: SignalCardPr
   const unit      = config?.unit || 'points';
   const n         = signal.newbie;
 
-  const { contracts, dollarRisk, marginEstimate } = calcContracts(accountBalance, riskPercent, entryMid, signal.stop_loss, signal.symbol);
+  const { contracts, dollarRisk, marginEstimate, dollarRiskPerContract, dollarRiskAllowed, overBudget } = calcContracts(accountBalance, riskPercent, entryMid, signal.stop_loss, signal.symbol);
   const tp1DollarReward = contracts * Math.abs(signal.tp1 - entryMid) * (config?.pointValue || 1);
   const tp2DollarReward = contracts * Math.abs(signal.tp2 - entryMid) * (config?.pointValue || 1);
   const tp3DollarReward = contracts * Math.abs(signal.tp3 - entryMid) * (config?.pointValue || 1);
@@ -288,20 +288,29 @@ export function SignalCard({ signal, accountBalance, riskPercent }: SignalCardPr
                 </div>
 
                 {/* Position sizing */}
-                <div className="p-4 bg-amber-500/5 border border-amber-500/15 rounded-xl">
+                <div className={`p-4 rounded-xl border ${overBudget ? 'bg-red-500/5 border-red-500/20' : 'bg-amber-500/5 border-amber-500/15'}`}>
                   <div className="flex items-center gap-2 mb-3">
                     <Target className="w-4 h-4 text-amber-400" />
                     <span className="text-xs font-display font-semibold text-amber-400 uppercase tracking-wider">Position Sizing</span>
-                    <span className="font-data text-[10px] text-gray-600">({riskPercent}% risk · ${accountBalance.toLocaleString()})</span>
+                    <span className="font-data text-[10px] text-gray-600 ml-auto">{riskPercent}% · ${accountBalance.toLocaleString()}</span>
                   </div>
+                  {overBudget && (
+                    <div className="mb-3 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+                      <span className="text-red-400 text-base leading-none mt-0.5">⚠️</span>
+                      <div>
+                        <div className="text-xs font-bold text-red-400">Over Budget — 1 contract costs ${dollarRiskPerContract.toFixed(0)}</div>
+                        <div className="text-[10px] text-red-400/70 mt-0.5">Your {riskPercent}% risk allows ${dollarRiskAllowed.toFixed(0)}. Consider the micro version of this contract.</div>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="bg-[#0A0B0D] rounded-lg p-2.5">
                       <div className="text-[10px] text-gray-600 mb-1">Contracts</div>
                       <div className="font-data font-bold text-lg text-white flex items-center gap-1">{contracts}<CopyButton value={contracts} label="contracts" /></div>
                     </div>
-                    <div className="bg-[#0A0B0D] rounded-lg p-2.5">
-                      <div className="text-[10px] text-gray-600 mb-1">Dollar Risk</div>
-                      <div className="font-data font-bold text-lg text-red-400 flex items-center gap-1">${dollarRisk.toFixed(0)}<CopyButton value={dollarRisk.toFixed(2)} /></div>
+                    <div className={`bg-[#0A0B0D] rounded-lg p-2.5`}>
+                      <div className="text-[10px] text-gray-600 mb-1">Actual Risk</div>
+                      <div className={`font-data font-bold text-lg flex items-center gap-1 ${overBudget ? 'text-red-400' : 'text-amber-400'}`}>${dollarRisk.toFixed(0)}<CopyButton value={dollarRisk.toFixed(2)} /></div>
                     </div>
                     <div className="bg-[#0A0B0D] rounded-lg p-2.5">
                       <div className="text-[10px] text-gray-600 mb-1">TP1 Reward</div>
@@ -313,6 +322,10 @@ export function SignalCard({ signal, accountBalance, riskPercent }: SignalCardPr
                     </div>
                   </div>
                   <div className="mt-2 space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-gray-600">Risk per contract</span>
+                      <span className="font-data text-gray-400">${dollarRiskPerContract.toFixed(0)}</span>
+                    </div>
                     {[
                       { label: 'TP2 reward', val: tp2DollarReward },
                       { label: 'TP3 reward', val: tp3DollarReward },
