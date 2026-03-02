@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { LoginPage }    from './pages/LoginPage';
 import { AppShell }     from './pages/AppShell';
 import { LandingPage }  from './pages/LandingPage';
+import { PricingPage }  from './pages/PricingPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 
 export default function App() {
@@ -11,8 +12,9 @@ export default function App() {
       <BrowserRouter>
         <div className="grain">
           <Routes>
-            <Route path="/"      element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
+            <Route path="/"         element={<LandingPage />} />
+            <Route path="/pricing"  element={<PricingPage />} />
+            <Route path="/login"    element={<LoginPage />} />
             <Route
               path="/app"
               element={
