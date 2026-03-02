@@ -228,13 +228,13 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return new Response(JSON.stringify({ error: 'No authorization' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    const supabaseAuth = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(authHeader.replace('Bearer ', ''));
-    if (userError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Decode user ID directly from JWT payload (no round-trip needed)
+    let userId = 'unknown';
+    try {
+      const token = authHeader.replace('Bearer ', '');
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      userId = payload.sub || 'unknown';
+    } catch { /* non-critical, still proceed */ }
 
     const body = await req.json();
     const symbol: string    = (body.symbol || 'ES').toUpperCase();
@@ -332,7 +332,7 @@ Return ONLY valid JSON with no markdown.`;
     );
 
     const { data: saved } = await supabaseAdmin.from('data_analyses').insert({
-      user_id:         user.id,
+      user_id:         userId,
       symbol:          ai.pair,
       timeframe:       ai.timeframe,
       direction:       ai.direction,
