@@ -141,3 +141,54 @@
   z-index: 9999;
   opacity: 0.4;
 }
+
+/* ── Fix slashed zeros from Syne font ── */
+.font-data, [class*="font-data"] {
+  font-variant-numeric: normal;
+  font-feature-settings: normal;
+}
+
+/* Disable OpenType slashed zero globally on DM Mono */
+@font-face {
+  font-family: 'DM Mono';
+  font-feature-settings: "zero" 0;
+}
+
+/* ── Mobile safe area padding ── */
+@supports (padding: max(0px)) {
+  .safe-bottom { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .safe-top    { padding-top: max(0px, env(safe-area-inset-top)); }
+}
+
+/* ── Mobile: tighter stat cards ── */
+@media (max-width: 639px) {
+  /* Reduce over-large padding on mobile cards */
+  .stat-card-sm {
+    padding: 10px 12px !important;
+  }
+  /* Tighter vertical rhythm */
+  .mobile-tight > * + * {
+    margin-top: 10px !important;
+  }
+  /* Prevent horizontal overflow */
+  * { max-width: 100%; }
+}
+
+/* ── Drawer animation ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Prevent iOS bounce scroll on fixed elements ── */
+.fixed-no-bounce {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* ── Touch-friendly tap targets (min 44px) ── */
+@media (max-width: 639px) {
+  button, a, select {
+    min-height: 36px;
+  }
+}
