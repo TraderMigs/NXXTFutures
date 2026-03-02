@@ -249,7 +249,7 @@ Analyze for a valid SMC setup. Only return a signal if confidence >= 75% and a g
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 1500,
+      max_tokens: 4000,
       system: SCANNER_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -257,11 +257,45 @@ Analyze for a valid SMC setup. Only return a signal if confidence >= 75% and a g
     const textBlock = message.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') return null;
 
-    const jsonText = textBlock.text.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    // ── Robust JSON extraction ─────────────────────────────────────────────
+    let rawText = textBlock.text.trim();
+    // Strip markdown code fences
+    rawText = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    // Find the outermost JSON object
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 
-    const result = JSON.parse(jsonMatch[0]);
+    let jsonStr = jsonMatch[0];
+
+    // Remove control characters inside string values (newlines/tabs embedded in strings)
+    // Replace literal \n and \r inside JSON string values with a space
+    jsonStr = jsonStr.replace(/([":,\[\{]\s*"[^"]*?)\n([^"]*?")/g, '$1 $2');
+    jsonStr = jsonStr.replace(/([":,\[\{]\s*"[^"]*?)\r([^"]*?")/g, '$1 $2');
+
+    // If JSON is truncated (ends mid-stream), attempt to close it gracefully
+    // by detecting if parse fails and trimming to last valid comma position
+    let result: any;
+    try {
+      result = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      // Attempt recovery: truncate at last complete key:value boundary
+      // Find last occurrence of a complete field (ends with }, ], or "value")
+      const lastComma = jsonStr.lastIndexOf(',');
+      if (lastComma > 100) {
+        const truncated = jsonStr.slice(0, lastComma) + '\n}';
+        try {
+          result = JSON.parse(truncated);
+          console.log(`JSON truncation recovery succeeded for ${symbol}`);
+        } catch {
+          console.error(`JSON parse failed even after recovery for ${symbol}:`, parseErr);
+          return null;
+        }
+      } else {
+        console.error(`JSON parse failed for ${symbol}:`, parseErr);
+        return null;
+      }
+    }
 
     // No setup found
     if (result.no_setup === true) {
