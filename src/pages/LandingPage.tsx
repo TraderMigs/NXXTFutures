@@ -812,37 +812,49 @@ export function LandingPage() {
 
           <div className="text-center mb-14">
             <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(36px, 5vw, 64px)', color: 'white', letterSpacing: '-1px' }}>
-              <span style={{ display: 'block' }}>One tier.</span>
-              <span className="shimmer-text" style={{ display: 'block' }}>All tools.</span>
+              <span style={{ display: 'block' }}>Start free.</span>
+              <span className="shimmer-text" style={{ display: 'block' }}>Go Elite when ready.</span>
             </h2>
             <p style={{ fontFamily: 'DM Sans', color: 'rgba(203,213,225,0.8)', marginTop: '12px', fontSize: '16px' }}>
-              No feature-gating. No paywalled analysis.
+              Free Trader gets you in the door. Elite Trader unlocks everything.
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-5 max-w-2xl mx-auto">
 
-            {/* Free */}
+            {/* Free Trader */}
             <div className="glass-card rounded-3xl p-8">
               <div style={{ fontFamily: 'DM Mono', fontSize: '10px', color: '#4B5563', letterSpacing: '2px', marginBottom: '12px' }}>FREE TRADER</div>
               <div style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: '40px', color: 'white' }}>$0</div>
-              <div style={{ fontFamily: 'DM Sans', color: 'rgba(148,163,184,0.5)', fontSize: '12px', marginTop: '4px', marginBottom: '24px' }}>Forever free</div>
-              {['5 analyses per month', 'Hot Picks feed', 'Basic journal'].map(item => (
-                <div key={item} className="flex items-center gap-3 mb-3">
-                  <div className="w-4 h-4 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center flex-shrink-0">
+              <div style={{ fontFamily: 'DM Sans', color: 'rgba(148,163,184,0.5)', fontSize: '12px', marginTop: '4px', marginBottom: '24px' }}>Forever free · No card required</div>
+              {[
+                { label: '1 Hot Pick daily (at NY Open)', active: true },
+                { label: 'View all platform tabs (read-only)', active: true },
+                { label: 'Unlimited chart analyses', active: false },
+                { label: 'All AI Hot Picks signals', active: false },
+                { label: 'Trading Journal + AI Coach', active: false },
+                { label: 'Trade History & analytics', active: false },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-3 mb-3">
+                  <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={item.active
+                      ? { background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)' }
+                      : { background: '#111318', border: '1px solid #1E2128' }}>
                     <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-                      <path d="M1 3l2 2 4-4" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" />
+                      <path d="M1 3l2 2 4-4" stroke={item.active ? '#34D399' : '#374151'} strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                   </div>
-                  <span style={{ fontFamily: 'DM Sans', fontSize: '13px', color: '#6B7280' }}>{item}</span>
+                  <span style={{ fontFamily: 'DM Sans', fontSize: '13px', color: item.active ? 'rgba(203,213,225,0.9)' : '#374151' }}>
+                    {item.label}
+                  </span>
                 </div>
               ))}
-              <button onClick={() => navigate('/login')} className="btn-glass mt-6 w-full py-3 rounded-xl text-sm text-gray-400" style={{ fontFamily: 'DM Sans' }}>
+              <button onClick={() => navigate('/pricing')} className="btn-glass mt-6 w-full py-3 rounded-xl text-sm text-gray-400" style={{ fontFamily: 'DM Sans' }}>
                 Get Started Free
               </button>
             </div>
 
-            {/* Elite */}
+            {/* Elite Trader */}
             <div className="relative rounded-3xl p-8 overflow-hidden"
               style={{
                 background: 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.06))',
@@ -856,9 +868,16 @@ export function LandingPage() {
                 </div>
               </div>
               <div style={{ fontFamily: 'DM Mono', fontSize: '10px', color: '#F59E0B', letterSpacing: '2px', marginBottom: '12px' }}>ELITE TRADER</div>
-              <div style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: '40px', color: 'white' }}>$99<span style={{ fontSize: '18px', fontWeight: 400, color: '#6B7280' }}>/mo</span></div>
-              <div style={{ fontFamily: 'DM Sans', color: 'rgba(148,163,184,0.5)', fontSize: '12px', marginTop: '4px', marginBottom: '24px' }}>Cancel anytime</div>
-              {['Unlimited analyses', 'Live AI Hot Picks', 'Full trading journal', 'AI Coach feedback', 'Trade history analytics', 'Priority updates'].map(item => (
+              <div style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: '40px', color: 'white' }}>$97<span style={{ fontSize: '18px', fontWeight: 400, color: '#6B7280' }}>/mo</span></div>
+              <div style={{ fontFamily: 'DM Sans', color: 'rgba(148,163,184,0.5)', fontSize: '12px', marginTop: '4px', marginBottom: '24px' }}>Cancel anytime · Instant access</div>
+              {[
+                'Unlimited chart analyses',
+                'All AI Hot Picks — every signal',
+                'Trading Journal + AI Coach feedback',
+                'Full trade history & win rate analytics',
+                'Position sizing calculator',
+                'Outcome tracking & performance stats',
+              ].map(item => (
                 <div key={item} className="flex items-center gap-3 mb-3">
                   <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
                     style={{ background: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.4)' }}>
@@ -874,7 +893,7 @@ export function LandingPage() {
                 <button onClick={() => navigate('/pricing')}
                   className="btn-primary relative w-full py-3 rounded-xl font-bold text-black text-sm"
                   style={{ fontFamily: 'Syne', zIndex: 1 }}>
-                  <span className="relative z-10">Start Elite Free Trial</span>
+                  <span className="relative z-10">Start Elite — $97/mo</span>
                 </button>
               </div>
             </div>
