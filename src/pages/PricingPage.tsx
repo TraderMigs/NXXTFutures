@@ -8,7 +8,6 @@ const FREE_FEATURES = [
   { label: 'All AI Hot Picks signals', included: false },
   { label: 'Trading Journal + AI Coach', included: false },
   { label: 'Trade History & analytics', included: false },
-  { label: 'Full position sizing calc', included: false },
 ];
 
 const ELITE_FEATURES = [
@@ -16,9 +15,8 @@ const ELITE_FEATURES = [
   { label: 'All AI Hot Picks — every signal', included: true },
   { label: 'Trading Journal + AI Coach feedback', included: true },
   { label: 'Full trade history & win rate analytics', included: true },
-  { label: 'Advanced position sizing calc', included: true },
+  { label: 'Position sizing calculator', included: true },
   { label: 'Outcome tracking & performance stats', included: true },
-  { label: 'Priority access to new features', included: true },
 ];
 
 export function PricingPage() {
