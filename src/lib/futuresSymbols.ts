@@ -367,25 +367,39 @@ export function calcContracts(
   entryPrice: number,
   stopLoss: number,
   symbol: string
-): { contracts: number; dollarRisk: number; marginEstimate: number } {
+): {
+  contracts: number;
+  dollarRisk: number;
+  marginEstimate: number;
+  dollarRiskPerContract: number;
+  dollarRiskAllowed: number;
+  overBudget: boolean;
+} {
   const config = FUTURES_MAP[symbol];
-  if (!config) return { contracts: 1, dollarRisk: 0, marginEstimate: 0 };
+  if (!config) return { contracts: 1, dollarRisk: 0, marginEstimate: 0, dollarRiskPerContract: 0, dollarRiskAllowed: 0, overBudget: false };
 
-  const dollarRiskAllowed = (accountBalance * riskPercent) / 100;
-  const priceDiff = Math.abs(entryPrice - stopLoss);
+  const dollarRiskAllowed  = (accountBalance * riskPercent) / 100;
+  const priceDiff          = Math.abs(entryPrice - stopLoss);
   const dollarRiskPerContract = (priceDiff / config.tickSize) * config.tickValue;
 
-  if (dollarRiskPerContract === 0) return { contracts: 1, dollarRisk: 0, marginEstimate: 0 };
+  if (dollarRiskPerContract === 0) return { contracts: 1, dollarRisk: 0, marginEstimate: 0, dollarRiskPerContract: 0, dollarRiskAllowed, overBudget: false };
 
-  const contracts = Math.floor(dollarRiskAllowed / dollarRiskPerContract);
+  const contracts       = Math.floor(dollarRiskAllowed / dollarRiskPerContract);
   const actualContracts = Math.max(1, contracts);
   const actualDollarRisk = actualContracts * dollarRiskPerContract;
-  const notional = entryPrice * config.contractSize;
-  const marginEstimate = notional * 0.07 * actualContracts;
+  const overBudget      = actualDollarRisk > dollarRiskAllowed;
+
+  // Use pointValue for notional — correct for index futures (ES=0/pt, MES=/pt)
+  // For commodities pointValue matches contractSize so result is the same
+  const notional        = entryPrice * config.pointValue;
+  const marginEstimate  = notional * 0.07 * actualContracts;
 
   return {
-    contracts: actualContracts,
-    dollarRisk: Math.round(actualDollarRisk * 100) / 100,
-    marginEstimate: Math.round(marginEstimate),
+    contracts:             actualContracts,
+    dollarRisk:            Math.round(actualDollarRisk * 100) / 100,
+    marginEstimate:        Math.round(marginEstimate),
+    dollarRiskPerContract: Math.round(dollarRiskPerContract * 100) / 100,
+    dollarRiskAllowed:     Math.round(dollarRiskAllowed * 100) / 100,
+    overBudget,
   };
 }
