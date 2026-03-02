@@ -57,6 +57,20 @@ export type FuturesSignal = {
   expires_at: string | null;
   status_updated_at: string | null;
   created_at: string;
+  is_counter_trend?: boolean;
+  newbie?: {
+    what_is_happening: string;
+    direction_explained: string;
+    big_picture: string;
+    entry_explained: string;
+    confirmation_explained: string;
+    stop_loss_explained: string;
+    targets_explained: string;
+    smc_elements_plain: string[];
+    what_to_do_step_by_step: string[];
+    risk_reality_check: string;
+    confidence_plain: string;
+  } | null;
 };
 
 export type AccountSettings = {
