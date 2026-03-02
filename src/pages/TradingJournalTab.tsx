@@ -4,6 +4,8 @@ import {
   Clock, XCircle, Zap, ChevronDown, ChevronUp, RefreshCw,
   Smile, AlertTriangle, Target, BarChart3, Pencil, Trash2, Loader2
 } from 'lucide-react';
+import { useTier } from '../contexts/TierContext';
+import { Lock } from 'lucide-react';
 import { supabase, JournalEntry, DataAnalysis } from '../lib/supabase';
 
 // ── Emotion config ─────────────────────────────────────────────────────────────
@@ -542,7 +544,7 @@ export function TradingJournalTab({ prefillAnalysis }: { prefillAnalysis?: DataA
 
           {/* New entry button */}
           {!showForm && (
-            <button onClick={() => setShowForm(true)}
+            <button onClick={() => isElite ? setShowForm(true) : triggerUpgrade("Trading Journal")}
               className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-400 text-black font-display font-bold text-sm rounded-2xl transition-all">
               <Plus className="w-4 h-4" />
               New Journal Entry
