@@ -1,3 +1,4 @@
+// v2 - Yahoo Finance
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import Anthropic from 'npm:@anthropic-ai/sdk@0.71.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
