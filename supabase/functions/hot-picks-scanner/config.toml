@@ -1,0 +1,2 @@
+[functions.hot-picks-scanner]
+verify_jwt = false
