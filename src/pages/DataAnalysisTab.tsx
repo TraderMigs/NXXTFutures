@@ -7,6 +7,8 @@ import {
   Star, Shield, Target, DollarSign, HelpCircle, AlertOctagon, ArrowRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useTier } from '../contexts/TierContext';
+import { Lock } from 'lucide-react';
 import { FUTURES_SYMBOLS, formatFuturesPrice, calcContracts, FUTURES_MAP, FUTURES_CATEGORIES } from '../lib/futuresSymbols';
 import { AccountPanel } from '../components/AccountPanel';
 import { AnalysisTheater } from '../components/AnalysisTheater';
@@ -237,6 +239,7 @@ export function DataAnalysisTab() {
   const [error,             setError]             = useState<string | null>(null);
   const [result,            setResult]            = useState<AnalysisResult | null>(null);
   const [savedAnalysisId,   setSavedAnalysisId]   = useState<string | null>(null);
+  const { isElite, triggerUpgrade } = useTier();
   const [activeTab,         setActiveTab]         = useState<'elite' | 'newbie'>('elite');
   const [symbolDropdownOpen,setSymbolDropdownOpen] = useState(false);
   const [accountBalance,    setAccountBalance]    = useState(10000);
@@ -397,7 +400,7 @@ export function DataAnalysisTab() {
               </select>
             </div>
 
-            <button onClick={handleAnalyze} disabled={loading}
+            <button onClick={isElite ? handleAnalyze : () => triggerUpgrade('Data Analysis')} disabled={loading && isElite}
               className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:cursor-not-allowed text-black font-display font-bold text-sm rounded-xl transition-all">
               {loading ? (<><div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />Analyzing {selectedSymbol}...</>) : (<><Search className="w-4 h-4" />Analyze {selectedSymbol}</>)}
             </button>
@@ -811,4 +814,3 @@ export function DataAnalysisTab() {
     </div>
   );
 }
-
