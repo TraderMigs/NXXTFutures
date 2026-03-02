@@ -154,19 +154,28 @@ CONFIDENCE SCORING:
 - 1 element = 62-70%
 - HTF alignment adds 2pts, HTF contradiction subtracts 3-5pts
 
-MINIMUM THRESHOLD: Only return a signal if confidence >= 75%. If no valid setup exists, return {"no_setup": true, "reason": "brief reason"}.
+CRITICAL COUNTER-TREND RULE:
+If the trade direction CONTRADICTS the HTF bias (e.g. BUY when 4H is bearish):
+- MAXIMUM confidence is 72% regardless of elements
+- Set is_counter_trend: true
+- Add "⚠️ COUNTER-TREND TRADE" as first reasoning point
+- Include key_warning explaining the conflict
+
+MINIMUM THRESHOLD: Only return a signal if confidence >= 75%. Counter-trend setups must still meet this threshold. If no valid setup, return {"no_setup": true, "reason": "brief reason"}.
 
 ENTRY ZONE RULES:
 BUY setup — entry zone must be BELOW current price (waiting for pullback)
 SELL setup — entry zone must be ABOVE current price (waiting for pullback)
+If current price is already past the entry zone, return no_setup.
 
-If current price is already past the entry zone (setup missed), return no_setup.
+NEWBIE EXPLANATION — write as if explaining to someone who has NEVER traded before. Plain English, short sentences, no jargon.
 
 RETURN ONLY VALID JSON:
 {
   "no_setup": false,
   "direction": "BUY",
   "confidence": 87,
+  "is_counter_trend": false,
   "higher_tf_bias": "4H bullish — BOS above previous swing high, price in premium",
   "smc_elements_confirmed": ["market_structure", "order_block", "liquidity_sweep"],
   "entry_zone_min": 5271.00,
@@ -190,7 +199,24 @@ RETURN ONLY VALID JSON:
     "candles_to_wait": 2,
     "key_warning": null
   },
-  "risk_reward": "1:2.1"
+  "risk_reward": "1:2.1",
+  "newbie": {
+    "what_is_happening": "Plain English: what the market is doing right now",
+    "direction_explained": "Plain English: why we buy or sell and what that means",
+    "big_picture": "Plain English: what the bigger 4H chart shows",
+    "entry_explained": "Plain English: what the entry zone is and why we wait for it",
+    "confirmation_explained": "Plain English: exactly what candle to look for before entering",
+    "stop_loss_explained": "Plain English: what the stop loss does and why it is placed there",
+    "targets_explained": "Plain English: what TP1/TP2/TP3 are and what to do at each",
+    "smc_elements_plain": [
+      "Plain English explanation of each confirmed SMC element"
+    ],
+    "what_to_do_step_by_step": [
+      "Step 1: ...", "Step 2: ...", "Step 3: ..."
+    ],
+    "risk_reality_check": "Honest plain English about risk and the R:R ratio",
+    "confidence_plain": "Plain English explanation of what the confidence score means for this specific setup"
+  }
 }`;
 
 // ── Scan a single symbol ───────────────────────────────────────────────────────
@@ -298,6 +324,8 @@ async function saveSignal(signal: any, supabase: any): Promise<void> {
     setup_status_note: signal.setup_status_note || null,
     higher_tf_bias: signal.higher_tf_bias || null,
     entry_validation: signal.entry_validation || null,
+    is_counter_trend: signal.is_counter_trend || false,
+    newbie: signal.newbie || null,
     generated_at: now.toISOString(),
     expires_at: expiresAt.toISOString(),
     created_at: now.toISOString(),
