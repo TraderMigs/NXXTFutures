@@ -1,4 +1,4 @@
-// v3 - No image, pure data analysis with chart_high/chart_low for overlay
+// v4 - No image, pure data analysis — deployed with --no-verify-jwt
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import Anthropic from 'npm:@anthropic-ai/sdk@0.71.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
