@@ -236,6 +236,7 @@ export function DataAnalysisTab() {
   const [loading,           setLoading]           = useState(false);
   const [error,             setError]             = useState<string | null>(null);
   const [result,            setResult]            = useState<AnalysisResult | null>(null);
+  const [savedAnalysisId,   setSavedAnalysisId]   = useState<string | null>(null);
   const [activeTab,         setActiveTab]         = useState<'elite' | 'newbie'>('elite');
   const [symbolDropdownOpen,setSymbolDropdownOpen] = useState(false);
   const [accountBalance,    setAccountBalance]    = useState(10000);
@@ -257,7 +258,38 @@ export function DataAnalysisTab() {
       });
       if (fnError) throw new Error(fnError.message || 'Analysis failed.');
       if (!data?.analysis) throw new Error('No analysis returned.');
-      setResult(data.analysis);
+      const ai = data.analysis;
+      setResult(ai);
+      // Auto-save to data_analyses
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const entryMid = (ai.entry_zone_min + ai.entry_zone_max) / 2;
+        const { data: saved } = await supabase.from('data_analyses').insert({
+          user_id:           user.id,
+          symbol:            ai.pair,
+          timeframe:         ai.timeframe,
+          direction:         ai.direction,
+          confidence:        ai.confidence,
+          current_price:     ai.current_price,
+          entry_zone_min:    ai.entry_zone_min,
+          entry_zone_max:    ai.entry_zone_max,
+          stop_loss:         ai.stop_loss,
+          sl_points:         ai.sl_pips,
+          tp1:               ai.tp1,   tp1_points: ai.tp1_pips,
+          tp2:               ai.tp2,   tp2_points: ai.tp2_pips,
+          tp3:               ai.tp3,   tp3_points: ai.tp3_pips,
+          risk_reward:       ai.risk_reward,
+          higher_tf_bias:    ai.higher_tf_bias || null,
+          setup_status:      ai.setup_status || null,
+          setup_status_note: ai.setup_status_note || null,
+          is_counter_trend:  ai.is_counter_trend || false,
+          reasoning:         ai.reasoning,
+          entry_validation:  ai.entry_validation || null,
+          newbie:            ai.newbie || null,
+          outcome:           'PENDING',
+        }).select('id').single();
+        if (saved) setSavedAnalysisId(saved.id);
+      }
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     } catch (err: any) {
       setError(err.message || 'Something went wrong.');
@@ -779,3 +811,4 @@ export function DataAnalysisTab() {
     </div>
   );
 }
+
