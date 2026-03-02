@@ -1,4 +1,4 @@
-// v2 - Yahoo Finance
+// v3 - deployed with --no-verify-jwt
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import Anthropic from 'npm:@anthropic-ai/sdk@0.71.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
