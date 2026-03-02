@@ -32,12 +32,25 @@ const FUTURES_CONFIGS: Record<string, FuturesTickConfig> = {
   ZS:  { tickSize: 0.25, tickValue: 12.50, pointValue: 50,    unit: 'ticks',  displayName: 'Soybeans',          decimals: 4 },
 };
 
-// TwelveData symbol mapping for futures
-const TD_SYMBOL_MAP: Record<string, string> = {
-  ES: 'ES:CME', NQ: 'NQ:CME', YM: 'YM:CBOT', RTY: 'RTY:CME',
-  GC: 'GC:COMEX', SI: 'SI:COMEX', HG: 'HG:COMEX',
-  CL: 'CL:NYMEX', NG: 'NG:NYMEX', RB: 'RB:NYMEX',
-  ZC: 'ZC:CBOT', ZW: 'ZW:CBOT', ZS: 'ZS:CBOT',
+// ── Yahoo Finance symbol mapping (=F suffix format) ────────────────────────────
+const YF_SYMBOL_MAP: Record<string, string> = {
+  ES: 'ES=F', NQ: 'NQ=F', YM: 'YM=F', RTY: 'RTY=F',
+  GC: 'GC=F', SI: 'SI=F', HG: 'HG=F',
+  CL: 'CL=F', NG: 'NG=F', RB: 'RB=F',
+  ZC: 'ZC=F', ZW: 'ZW=F', ZS: 'ZS=F',
+};
+
+// ── Timeframe mapping: tool names → Yahoo Finance interval + range ─────────────
+// Note: Yahoo has no 4h interval — we fetch 1h with extra candles for 4h context
+const YF_INTERVAL_MAP: Record<string, { interval: string; range: string }> = {
+  '1min':  { interval: '1m',  range: '5d'   },
+  '5min':  { interval: '5m',  range: '60d'  },
+  '15min': { interval: '15m', range: '60d'  },
+  '30min': { interval: '30m', range: '60d'  },
+  '1h':    { interval: '1h',  range: '730d' },
+  '4h':    { interval: '1h',  range: '730d' },
+  '1day':  { interval: '1d',  range: '5y'   },
+  '1week': { interval: '1wk', range: '10y'  },
 };
 
 function getFuturesConfig(symbol: string): FuturesTickConfig {
@@ -53,41 +66,148 @@ function calculatePoints(entry: number, exit: number, direction: 'BUY' | 'SELL',
   return parseFloat((diff / cfg.tickSize).toFixed(1));
 }
 
-async function executeToolCall(toolName: string, toolInput: Record<string, unknown>): Promise<string> {
-  const apiKey = Deno.env.get('TWELVE_DATA_API_KEY');
-  if (!apiKey) return JSON.stringify({ error: 'Market data not configured.' });
+// ── Parse Yahoo Finance chart response into clean OHLCV array ─────────────────
+interface Candle {
+  datetime: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
 
+function parseYahooChart(data: any): Candle[] {
   try {
-    let url: string;
+    const result = data?.chart?.result?.[0];
+    if (!result) return [];
+    const timestamps: number[] = result.timestamp || [];
+    const quote = result.indicators?.quote?.[0] || {};
+    const opens: number[] = quote.open || [];
+    const highs: number[] = quote.high || [];
+    const lows: number[] = quote.low || [];
+    const closes: number[] = quote.close || [];
+    const volumes: number[] = quote.volume || [];
+
+    return timestamps
+      .map((ts, i) => ({
+        datetime: new Date(ts * 1000).toISOString(),
+        open:   opens[i]   ?? 0,
+        high:   highs[i]   ?? 0,
+        low:    lows[i]    ?? 0,
+        close:  closes[i]  ?? 0,
+        volume: volumes[i] ?? 0,
+      }))
+      .filter(c => c.open !== 0 && c.close !== 0);
+  } catch {
+    return [];
+  }
+}
+
+// ── ATR(14) calculation from candle array ──────────────────────────────────────
+function calculateATR(candles: Candle[], period = 14): number {
+  if (candles.length < period + 1) return 0;
+  const trs: number[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const high = candles[i].high;
+    const low  = candles[i].low;
+    const prevClose = candles[i - 1].close;
+    trs.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+  }
+  const relevant = trs.slice(-period);
+  return parseFloat((relevant.reduce((a, b) => a + b, 0) / relevant.length).toFixed(4));
+}
+
+// ── Yahoo Finance fetch helper ─────────────────────────────────────────────────
+async function fetchYahoo(yfSymbol: string, interval: string, range: string): Promise<any> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?interval=${interval}&range=${range}&includePrePost=false`;
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0',
+      'Accept': 'application/json',
+    },
+  });
+  if (!response.ok) throw new Error(`Yahoo Finance returned status ${response.status}`);
+  return response.json();
+}
+
+// ── Tool call handler (Yahoo Finance) ─────────────────────────────────────────
+async function executeToolCall(toolName: string, toolInput: Record<string, unknown>): Promise<string> {
+  try {
     const rawSymbol = String(toolInput.symbol || '');
-    const tdSymbol = TD_SYMBOL_MAP[rawSymbol.toUpperCase()] || rawSymbol;
+    const yfSymbol = YF_SYMBOL_MAP[rawSymbol.toUpperCase()] || `${rawSymbol.toUpperCase()}=F`;
 
     switch (toolName) {
+
+      case 'get_current_price': {
+        const data = await fetchYahoo(yfSymbol, '1m', '1d');
+        const candles = parseYahooChart(data);
+        if (candles.length === 0) return JSON.stringify({ error: 'No price data returned' });
+        const lastCandle = candles[candles.length - 1];
+        return JSON.stringify({
+          symbol: rawSymbol,
+          price: lastCandle.close,
+          datetime: lastCandle.datetime,
+          note: '~15-minute delayed CME data via Yahoo Finance',
+        });
+      }
+
       case 'get_additional_candles': {
         const timeframe = String(toolInput.timeframe || '1h');
-        const count = Math.min(Number(toolInput.count) || 50, 100);
-        url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(tdSymbol)}&interval=${timeframe}&outputsize=${count}&apikey=${apiKey}`;
-        break;
+        const count = Math.min(Number(toolInput.count) || 50, 200);
+        const mapping = YF_INTERVAL_MAP[timeframe] || { interval: '1h', range: '730d' };
+
+        const data = await fetchYahoo(yfSymbol, mapping.interval, mapping.range);
+        const allCandles = parseYahooChart(data);
+        const candles = allCandles.slice(-count);
+
+        return JSON.stringify({
+          symbol: rawSymbol,
+          timeframe,
+          yahoo_interval: mapping.interval,
+          candle_count: candles.length,
+          candles,
+          note: timeframe === '4h' ? 'Fetched as 1h candles — group every 4 candles for 4H context' : undefined,
+        });
       }
+
       case 'get_technical_indicator': {
-        const indicator = String(toolInput.indicator || 'atr');
-        const timeframe = String(toolInput.timeframe || '1h');
-        const period = Number(toolInput.period) || 14;
-        url = `https://api.twelvedata.com/${indicator}?symbol=${encodeURIComponent(tdSymbol)}&interval=${timeframe}&time_period=${period}&outputsize=1&apikey=${apiKey}`;
-        break;
+        const indicator = String(toolInput.indicator || 'atr').toLowerCase();
+        const timeframe  = String(toolInput.timeframe || '1h');
+        const period     = Number(toolInput.period) || 14;
+        const mapping    = YF_INTERVAL_MAP[timeframe] || { interval: '1h', range: '730d' };
+
+        const data = await fetchYahoo(yfSymbol, mapping.interval, mapping.range);
+        const candles = parseYahooChart(data);
+
+        if (indicator === 'atr') {
+          const atr = calculateATR(candles, period);
+          return JSON.stringify({
+            symbol: rawSymbol,
+            indicator: 'atr',
+            timeframe,
+            period,
+            value: atr,
+            note: `ATR(${period}) computed from ${candles.length} candles`,
+          });
+        }
+
+        const closes = candles.slice(-Math.max(period * 3, 50)).map(c => ({
+          datetime: c.datetime,
+          close: c.close,
+        }));
+        return JSON.stringify({
+          symbol: rawSymbol,
+          indicator,
+          timeframe,
+          period,
+          closes,
+          note: `Raw close prices returned — compute ${indicator.toUpperCase()} from these values`,
+        });
       }
-      case 'get_current_price': {
-        url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(tdSymbol)}&apikey=${apiKey}`;
-        break;
-      }
+
       default:
         return JSON.stringify({ error: `Unknown tool: ${toolName}` });
     }
-
-    const response = await fetch(url);
-    if (!response.ok) return JSON.stringify({ error: `API status ${response.status}` });
-    const data = await response.json();
-    return JSON.stringify(data);
   } catch (err) {
     return JSON.stringify({ error: `Fetch failed: ${err instanceof Error ? err.message : 'Unknown'}` });
   }
@@ -96,20 +216,20 @@ async function executeToolCall(toolName: string, toolInput: Record<string, unkno
 const ANALYSIS_TOOLS = [
   {
     name: 'get_additional_candles',
-    description: 'Fetch OHLCV candle data for a different timeframe or longer price history.',
+    description: 'Fetch OHLCV candle data for a different timeframe or longer price history. Use for HTF and LTF timeframe fetches.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        symbol: { type: 'string' as const, description: 'Futures symbol (ES, NQ, GC, CL, etc.)' },
+        symbol: { type: 'string' as const, description: 'Futures symbol (ES, NQ, GC, CL, etc.) — do NOT include =F suffix' },
         timeframe: { type: 'string' as const, enum: ['1min', '5min', '15min', '30min', '1h', '4h', '1day', '1week'] },
-        count: { type: 'integer' as const, description: 'Number of candles (default 50, max 100)' },
+        count: { type: 'integer' as const, description: 'Number of candles (default 50, max 200). Use 200 for 4h timeframe.' },
       },
       required: ['symbol', 'timeframe'],
     },
   },
   {
     name: 'get_technical_indicator',
-    description: 'Fetch a technical indicator. Use ATR frequently for futures volatility context.',
+    description: 'Fetch a technical indicator. ATR is computed from candle data. Other indicators return raw closes for interpretation.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -123,11 +243,11 @@ const ANALYSIS_TOOLS = [
   },
   {
     name: 'get_current_price',
-    description: 'Fetch current live price. ALWAYS call this first.',
+    description: 'Fetch the latest available price for the symbol. ALWAYS call this first before any other tool.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        symbol: { type: 'string' as const },
+        symbol: { type: 'string' as const, description: 'Futures symbol (ES, NQ, GC, CL, etc.) — do NOT include =F suffix' },
       },
       required: ['symbol'],
     },
@@ -137,6 +257,12 @@ const ANALYSIS_TOOLS = [
 const SYSTEM_PROMPT = `You are an expert SMC (Smart Money Concepts) trading analyst specializing in CME Futures markets.
 
 You analyze futures contracts — equity indices (ES, NQ, YM, RTY), metals (GC, SI, HG), energy (CL, NG, RB), and agricultural commodities (ZC, ZW, ZS).
+
+DATA SOURCE NOTE:
+- Market data comes from Yahoo Finance (CME-sourced, ~15-minute delayed)
+- Data is suitable for 1H, 4H, Daily, and Weekly timeframe analysis
+- When using get_additional_candles with timeframe "4h", candles arrive as 1H bars — group every 4 bars mentally to read 4H structure
+- Do NOT include "=F" in symbol names when calling tools — use ES, NQ, GC etc.
 
 FUTURES-SPECIFIC KNOWLEDGE:
 - Futures trade in points/ticks, not pips. ES moves in 0.25 point increments ($12.50/tick). NQ moves in 0.25 point increments ($5/tick). GC moves in $0.10 increments ($10/tick). CL moves in $0.01 increments ($10/tick).
@@ -170,10 +296,10 @@ Step 4: Full SMC analysis anchored to the RIGHTMOST candle. Focus on:
 - Volume confirmation where visible
 
 CONFIDENCE SCORING:
-4 SMC elements = 90–95%
-3 elements = 82–89%
-2 elements = 73–79%
-1 element  = 62–70%
+4 SMC elements = 90-95%
+3 elements = 82-89%
+2 elements = 73-79%
+1 element  = 62-70%
 0 elements = below 60%
 
 HTF alignment adds 2pts. HTF contradiction subtracts 3-5pts. Clean institutional levels add 1-2pts. Choppy price subtracts 1-2pts.
@@ -213,8 +339,8 @@ RETURN ONLY VALID JSON — no markdown, no explanation outside JSON:
   "stop_loss": 5262.00,
   "sl_pips": 52,
   "setup_status": "PENDING",
-  "setup_status_note": "Price is above entry zone, waiting for retracement to 5271–5275",
-  "reasoning": ["4H structure bullish with BOS above 5290", "Order block at 5271–5275 from impulse candle", "Liquidity sweep below 5260 swing low"],
+  "setup_status_note": "Price is above entry zone, waiting for retracement to 5271-5275",
+  "reasoning": ["4H structure bullish with BOS above 5290", "Order block at 5271-5275 from impulse candle", "Liquidity sweep below 5260 swing low"],
   "entry_validation": {
     "confirmation_signal": "Bullish engulfing or pin bar closing above 5271",
     "entry_trigger": "Enter on close of confirmation candle",
@@ -286,7 +412,7 @@ Deno.serve(async (req: Request) => {
           type: 'text',
           text: `Analyze this futures chart using SMC principles.
 
-${userSymbol ? `User specified symbol: "${userSymbol}". Use this exact symbol for all API calls.` : 'Identify the futures symbol from the chart.'}
+${userSymbol ? `User specified symbol: "${userSymbol}". Use this exact symbol for all API calls (without =F suffix).` : 'Identify the futures symbol from the chart.'}
 
 MANDATORY STEPS:
 1. FIRST: Call get_current_price for the symbol.
@@ -354,7 +480,6 @@ MANDATORY STEPS:
     const symbol = userSymbol || aiAnalysis.pair;
     const entryMid = (aiAnalysis.entry_zone_min + aiAnalysis.entry_zone_max) / 2;
 
-    // Calculate points using futures tick configs
     aiAnalysis.tp1_pips = calculatePoints(entryMid, aiAnalysis.tp1, aiAnalysis.direction, symbol);
     aiAnalysis.tp2_pips = calculatePoints(entryMid, aiAnalysis.tp2, aiAnalysis.direction, symbol);
     aiAnalysis.tp3_pips = calculatePoints(entryMid, aiAnalysis.tp3, aiAnalysis.direction, symbol);
@@ -363,7 +488,6 @@ MANDATORY STEPS:
 
     if (userSymbol) aiAnalysis.pair = userSymbol;
 
-    // Save to Supabase
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
