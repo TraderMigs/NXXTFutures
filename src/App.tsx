@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { LoginPage }    from './pages/LoginPage';
-import { AppShell }     from './pages/AppShell';
-import { LandingPage }  from './pages/LandingPage';
-import { PricingPage }  from './pages/PricingPage';
+import { LoginPage } from './pages/LoginPage';
+import { AppShell } from './pages/AppShell';
+import { LandingPage } from './pages/LandingPage';
+import { PricingPage } from './pages/PricingPage';
+import { FuturesBasicsPage } from './pages/FuturesBasicsPage';
+import { PaymentSuccessPage } from './pages/PaymentSuccessPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 
 export default function App() {
@@ -12,9 +14,11 @@ export default function App() {
       <BrowserRouter>
         <div className="grain">
           <Routes>
-            <Route path="/"         element={<LandingPage />} />
-            <Route path="/pricing"  element={<PricingPage />} />
-            <Route path="/login"    element={<LoginPage />} />
+            <Route path="/"                element={<LandingPage />} />
+            <Route path="/pricing"         element={<PricingPage />} />
+            <Route path="/futures-basics"  element={<FuturesBasicsPage />} />
+            <Route path="/payment-success" element={<PaymentSuccessPage />} />
+            <Route path="/login"           element={<LoginPage />} />
             <Route
               path="/app"
               element={
