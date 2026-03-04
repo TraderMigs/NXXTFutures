@@ -368,17 +368,57 @@ async function saveSignal(signal: any, supabase: any): Promise<void> {
   console.log(`Saved signal: ${signal.symbol} ${signal.direction} @ ${signal.entry_zone_min}-${signal.entry_zone_max} (${signal.confidence}%)`);
 }
 
-// ── Expire old signals ─────────────────────────────────────────────────────────
+// ── Smart expiry — multi-rule ──────────────────────────────────────────────────
 async function expireOldSignals(supabase: any): Promise<void> {
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('futures_signals')
-    .update({ status: 'EXPIRED' })
-    .eq('status', 'ACTIVE')
-    .lt('expires_at', now);
+  const now = new Date();
+  let totalExpired = 0;
 
-  if (error) console.error('Error expiring signals:', error);
-  else console.log('Old signals expired');
+  // Rule 1: expires_at passed (original 24h rule)
+  const { error: e1, count: c1 } = await supabase
+    .from('futures_signals')
+    .update({ status: 'EXPIRED', status_updated_at: now.toISOString() })
+    .eq('status', 'ACTIVE')
+    .lt('expires_at', now.toISOString());
+  if (e1) console.error('Expiry rule 1 error:', e1);
+  else { totalExpired += (c1 || 0); }
+
+  // Rule 2: MISSED signals older than 1 hour → EXPIRED
+  // Entry was missed, no point keeping it around for more than 60 minutes
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+  const { error: e2, count: c2 } = await supabase
+    .from('futures_signals')
+    .update({ status: 'EXPIRED', status_updated_at: now.toISOString() })
+    .eq('status', 'ACTIVE')
+    .eq('setup_status', 'MISSED')
+    .lt('generated_at', oneHourAgo);
+  if (e2) console.error('Expiry rule 2 (MISSED >1h) error:', e2);
+  else { totalExpired += (c2 || 0); }
+
+  // Rule 3: PENDING signals older than 8 hours → EXPIRED
+  // A setup waiting 8+ hours for a pullback is most likely invalidated by new structure
+  const eightHoursAgo = new Date(now.getTime() - 8 * 60 * 60 * 1000).toISOString();
+  const { error: e3, count: c3 } = await supabase
+    .from('futures_signals')
+    .update({ status: 'EXPIRED', status_updated_at: now.toISOString() })
+    .eq('status', 'ACTIVE')
+    .eq('setup_status', 'PENDING')
+    .lt('generated_at', eightHoursAgo);
+  if (e3) console.error('Expiry rule 3 (PENDING >8h) error:', e3);
+  else { totalExpired += (c3 || 0); }
+
+  // Rule 4: Low confidence (<78%) signals older than 4 hours → EXPIRED
+  // Marginal setups have a shorter shelf life
+  const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString();
+  const { error: e4, count: c4 } = await supabase
+    .from('futures_signals')
+    .update({ status: 'EXPIRED', status_updated_at: now.toISOString() })
+    .eq('status', 'ACTIVE')
+    .lt('confidence', 78)
+    .lt('generated_at', fourHoursAgo);
+  if (e4) console.error('Expiry rule 4 (low-conf >4h) error:', e4);
+  else { totalExpired += (c4 || 0); }
+
+  console.log(`Old signals expired — total removed: ${totalExpired} (rules: 24h-limit, MISSED>1h, PENDING>8h, LowConf>4h)`);
 }
 
 // ── CORS headers ───────────────────────────────────────────────────────────────
