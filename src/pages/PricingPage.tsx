@@ -1,239 +1,229 @@
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Zap, Check, Lock } from 'lucide-react';
-
-const FREE_FEATURES = [
-  { label: '1 Hot Pick daily (at NY Open)', included: true },
-  { label: 'View all platform tabs', included: true },
-  { label: 'Unlimited chart analyses', included: false },
-  { label: 'All AI Hot Picks signals', included: false },
-  { label: 'Trading Journal + AI Coach', included: false },
-  { label: 'Trade History & analytics', included: false },
-];
-
-const ELITE_FEATURES = [
-  { label: 'Unlimited chart analyses', included: true },
-  { label: 'All AI Hot Picks — every signal', included: true },
-  { label: 'Trading Journal + AI Coach feedback', included: true },
-  { label: 'Full trade history & win rate analytics', included: true },
-  { label: 'Position sizing calculator', included: true },
-  { label: 'Outcome tracking & performance stats', included: true },
-];
+// src/pages/PricingPage.tsx
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle, ArrowLeft, Loader2, Zap, Shield, TrendingUp, BookOpen, Gift } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export function PricingPage() {
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [promoCode, setPromoCode] = useState('');
+  const [promoApplied, setPromoApplied] = useState(false);
+
+  useEffect(() => {
+    const promoParam = searchParams.get('promo');
+    if (promoParam) { setPromoCode(promoParam.toUpperCase()); setPromoApplied(true); }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!user) return;
+    const checkPromo = async () => {
+      const { data } = await supabase
+        .from('quiz_promo_redemptions')
+        .select('promo_code, redeemed, expires_at')
+        .eq('user_id', user.id)
+        .single();
+      if (data && !data.redeemed && new Date(data.expires_at) > new Date()) {
+        setPromoCode(data.promo_code); setPromoApplied(true);
+      }
+    };
+    checkPromo();
+  }, [user]);
+
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, []);
+
+  const isElite = profile?.subscription_tier === 'elite';
+
+  const handleSubscribe = async () => {
+    if (!user) { navigate('/signup?tier=elite'); return; }
+    if (isElite) { navigate('/dashboard'); return; }
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) { setError('Session expired. Please log out and log back in.'); return; }
+    setLoading(true); setError('');
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('create-signup-checkout', {
+        body: promoApplied && promoCode ? { promo_code: promoCode } : {},
+      });
+      if (invokeError) throw new Error(invokeError.message);
+      if (data?.error) throw new Error(data.error);
+      if (data?.url) { window.location.href = data.url; }
+      else throw new Error('No checkout URL returned');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start checkout');
+      setLoading(false);
+    }
+  };
+
+  const handleGetStarted = () => {
+    if (!user) { navigate('/signup?tier=free'); return; }
+    navigate('/dashboard');
+  };
 
   return (
-    <div className="min-h-screen bg-[#04050A] relative overflow-x-hidden"
-      style={{ fontFamily: "'DM Sans', sans-serif" }}>
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
-        @keyframes shimmer {
-          0%   { background-position: -200% center; }
-          100% { background-position: 200% center; }
-        }
-        .shimmer-text {
-          background: linear-gradient(90deg, #F59E0B 0%, #FDE68A 30%, #F59E0B 60%, #D97706 100%);
-          background-size: 200% auto;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          animation: shimmer 3s linear infinite;
-        }
-      `}</style>
-
-      {/* Ambient glow */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div style={{
-          position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
-          width: '600px', height: '400px',
-          background: 'radial-gradient(ellipse, rgba(245,158,11,0.06) 0%, transparent 70%)',
-        }} />
-      </div>
-
-      {/* ── Nav ──────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 px-6 py-4"
-        style={{ background: 'rgba(4,5,10,0.9)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <button onClick={() => navigate(-1)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all hover:bg-white/5"
-            style={{ color: '#6B7280', fontSize: '14px', fontFamily: 'DM Sans' }}>
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:block">Back</span>
+    <div className="min-h-screen bg-black text-white">
+      <div className="container mx-auto max-w-5xl px-4 pt-16 pb-20">
+        <div className="mb-8">
+          <button onClick={() => navigate(user ? '/dashboard' : '/')} className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+            <ArrowLeft className="w-4 h-4" />Back to {user ? 'Dashboard' : 'Home'}
           </button>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)' }}>
-              <span style={{ fontFamily: 'Syne', fontWeight: 800, color: '#F59E0B', fontSize: '11px' }}>NF</span>
+        </div>
+
+        {error && (
+          <div className="mb-6 max-w-2xl mx-auto p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>
+        )}
+
+        {promoApplied && promoCode && !isElite && (
+          <div className="mb-8 max-w-2xl mx-auto p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center gap-3">
+            <Gift className="w-5 h-5 text-green-400 flex-shrink-0" />
+            <div>
+              <p className="text-green-400 font-semibold text-sm">🏅 Graduation reward applied — <span className="font-mono">{promoCode}</span></p>
+              <p className="text-green-400/70 text-xs mt-0.5">50% off your first month will be applied at checkout</p>
             </div>
-            <span style={{ fontFamily: 'Syne', fontWeight: 800, color: 'white', fontSize: '15px' }}>NXXT Futures</span>
           </div>
+        )}
+
+        <div className="text-center mb-12">
+          <h1 className="text-3xl md:text-5xl font-bold mb-4">Simple, Honest Pricing</h1>
+          <p className="text-lg text-gray-400">AI-powered futures signals during peak institutional hours. No fluff, no noise.</p>
         </div>
-      </nav>
 
-      {/* ── Header ───────────────────────────────────────────────────── */}
-      <section className="pt-16 pb-12 px-6 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5"
-          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
-          <Zap className="w-3.5 h-3.5 text-amber-400" />
-          <span style={{ fontFamily: 'DM Mono', fontSize: '10px', color: '#F59E0B', letterSpacing: '2px' }}>
-            CHOOSE YOUR PLAN
-          </span>
-        </div>
-        <h1 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(32px, 6vw, 64px)', color: 'white', letterSpacing: '-1px', lineHeight: '1.1', marginBottom: '12px' }}>
-          Start free.<br />
-          <span className="shimmer-text">Go Elite when ready.</span>
-        </h1>
-        <p style={{ fontFamily: 'DM Sans', fontSize: '16px', color: 'rgba(148,163,184,0.8)', maxWidth: '480px', margin: '0 auto' }}>
-          Free Trader gets you in the door. Elite Trader gives you everything — unlimited analysis, all signals, AI coaching, and full analytics.
-        </p>
-      </section>
-
-      {/* ── Pricing cards ────────────────────────────────────────────── */}
-      <section className="px-6 pb-20">
-        <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-5">
-
-          {/* ── Free Trader ──────────────────────────────────────────── */}
-          <div className="rounded-3xl p-8 relative"
-            style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}>
-            <div style={{ fontFamily: 'DM Mono', fontSize: '10px', color: '#4B5563', letterSpacing: '2px', marginBottom: '16px' }}>
-              FREE TRADER
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          {/* FREE */}
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8">
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold mb-1">Free Trader</h3>
+              <p className="text-gray-400 text-sm">Explore the platform</p>
             </div>
-            <div className="flex items-end gap-2 mb-1">
-              <span style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: '52px', color: 'white', lineHeight: '1' }}>$0</span>
-            </div>
-            <div style={{ fontFamily: 'DM Sans', color: '#4B5563', fontSize: '13px', marginBottom: '28px' }}>
-              Forever free · No card required
-            </div>
-
-            <div className="space-y-3 mb-8">
-              {FREE_FEATURES.map((f, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded-full flex items-center justify-center ${f.included ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-gray-800 border border-gray-700'}`}>
-                    {f.included
-                      ? <Check className="w-2.5 h-2.5 text-emerald-400" />
-                      : <Lock className="w-2 h-2 text-gray-600" />
-                    }
-                  </div>
-                  <span style={{ fontFamily: 'DM Sans', fontSize: '13px', color: f.included ? 'rgba(203,213,225,0.9)' : '#374151' }}>
-                    {f.label}
-                  </span>
-                </div>
+            <div className="text-5xl font-bold mb-8">$0<span className="text-xl text-gray-400">/month</span></div>
+            <ul className="space-y-3 mb-8">
+              {['Live Hot Picks signal feed (limited)', 'Futures Basics education (free forever)', 'Position size calculator (unlimited)', 'Standard contract sizing', 'Signal age & status indicators'].map(item => (
+                <li key={item} className="flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-cyan-500 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-300 text-sm">{item}</span>
+                </li>
               ))}
-            </div>
-
-            <button
-              onClick={() => navigate('/login')}
-              className="w-full py-3.5 rounded-2xl text-sm font-medium transition-all hover:bg-white/8 active:scale-[0.98]"
-              style={{
-                fontFamily: 'DM Sans',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                color: 'rgba(203,213,225,0.8)',
-              }}>
-              Get Started Free
+            </ul>
+            <button onClick={handleGetStarted} className="w-full py-3 border border-gray-600 hover:border-gray-400 rounded-xl font-semibold text-sm transition-colors">
+              {user ? 'Go to Dashboard' : 'Get Started Free'}
             </button>
           </div>
 
-          {/* ── Elite Trader ─────────────────────────────────────────── */}
-          <div className="rounded-3xl p-8 relative overflow-hidden"
-            style={{
-              background: 'linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05))',
-              border: '1px solid rgba(245,158,11,0.3)',
-              boxShadow: '0 30px 80px rgba(245,158,11,0.12)',
-            }}>
-
-            {/* Glow */}
-            <div className="absolute top-0 right-0 w-48 h-48 pointer-events-none"
-              style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%)' }} />
-
-            {/* Badge */}
-            <div className="absolute top-5 right-5">
-              <div className="px-2.5 py-1 rounded-full text-[9px] font-bold flex items-center gap-1"
-                style={{ background: '#F59E0B', color: 'black', fontFamily: 'Syne' }}>
-                <Zap className="w-2.5 h-2.5" />
-                ELITE
-              </div>
+          {/* ELITE */}
+          <div className="bg-gray-900 border-2 border-yellow-500/60 rounded-2xl p-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 bg-gradient-to-r from-yellow-500 to-amber-500 text-black px-4 py-1.5 text-xs font-bold rounded-bl-xl">⚡ FULL ACCESS</div>
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold mb-1">Elite Trader</h3>
+              <p className="text-gray-400 text-sm">Everything, unlimited</p>
             </div>
-
-            <div style={{ fontFamily: 'DM Mono', fontSize: '10px', color: '#F59E0B', letterSpacing: '2px', marginBottom: '16px' }}>
-              ELITE TRADER
-            </div>
-            <div className="flex items-end gap-2 mb-1">
-              <span style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: '52px', color: 'white', lineHeight: '1' }}>$97</span>
-              <span style={{ fontFamily: 'DM Sans', color: '#6B7280', fontSize: '16px', marginBottom: '6px' }}>/month</span>
-            </div>
-            <div style={{ fontFamily: 'DM Sans', color: 'rgba(148,163,184,0.6)', fontSize: '13px', marginBottom: '28px' }}>
-              Cancel anytime · Instant access
-            </div>
-
-            <div className="space-y-3 mb-8">
-              {ELITE_FEATURES.map((f, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="flex-shrink-0 mt-0.5 w-4 h-4 rounded-full flex items-center justify-center bg-amber-500/20 border border-amber-500/30">
-                    <Check className="w-2.5 h-2.5 text-amber-400" />
+            <div className="mb-8">
+              {promoApplied ? (
+                <div>
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-5xl font-bold text-green-400">$48.50</span>
+                    <span className="text-gray-400 text-sm line-through">$97</span>
                   </div>
-                  <span style={{ fontFamily: 'DM Sans', fontSize: '13px', color: 'rgba(203,213,225,0.9)' }}>
-                    {f.label}
-                  </span>
+                  <p className="text-green-400 text-xs mt-1">first month · then $97/month</p>
                 </div>
+              ) : (
+                <div className="text-5xl font-bold">$97<span className="text-xl text-gray-400">/month</span></div>
+              )}
+            </div>
+            <ul className="space-y-3 mb-8">
+              {[
+                { text: 'Full Hot Picks feed — all symbols, all signals', bold: true },
+                { text: 'AI Data Analysis — unlimited on-demand scans', bold: true },
+                { text: '30-day signal history & performance tracking', bold: true },
+                { text: 'Standard + Micro contract sizing toggle', bold: true },
+                { text: 'Position size calculator (unlimited)', bold: false },
+                { text: 'Futures Basics education + graduation badge', bold: false },
+                { text: 'London & NY session signals only (highest quality)', bold: false },
+                { text: 'New features as they ship', bold: false },
+              ].map(item => (
+                <li key={item.text} className="flex items-start gap-3">
+                  <CheckCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${item.bold ? 'text-yellow-400' : 'text-gray-500'}`} />
+                  <span className={`text-sm ${item.bold ? 'text-white font-medium' : 'text-gray-400'}`}>{item.text}</span>
+                </li>
               ))}
-            </div>
+            </ul>
 
-            <div className="relative">
-              <div className="absolute inset-0 rounded-2xl pointer-events-none"
-                style={{ background: 'rgba(245,158,11,0.3)', filter: 'blur(16px)' }} />
-              <button
-                onClick={() => navigate('/login')}
-                className="relative w-full py-4 rounded-2xl font-bold text-black text-base transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                style={{
-                  fontFamily: 'Syne',
-                  background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                  boxShadow: '0 8px 24px rgba(245,158,11,0.3)',
-                  zIndex: 1,
-                }}>
-                Start Elite — $97/mo
-              </button>
-            </div>
+            {!promoApplied && user && (
+              <div className="mb-4 flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Promo code (e.g. GRADUATE50)"
+                  value={promoCode}
+                  onChange={e => setPromoCode(e.target.value.toUpperCase())}
+                  className="flex-1 px-3 py-2 bg-black border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-yellow-500"
+                />
+                <button onClick={() => { if (promoCode.trim()) setPromoApplied(true); }} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm font-medium transition-colors">Apply</button>
+              </div>
+            )}
 
-            <p className="text-center mt-3" style={{ fontFamily: 'DM Mono', fontSize: '10px', color: '#4B5563' }}>
-              No contracts · Cancel anytime
-            </p>
+            <button
+              onClick={handleSubscribe}
+              disabled={loading || isElite}
+              className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all ${isElite ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default' : 'bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black'}`}
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Processing...</span>
+              ) : isElite ? "✓ You're on Elite Trader" : user ? (promoApplied ? 'Upgrade — 50% Off First Month' : 'Upgrade to Elite Trader') : 'Start Elite Trader'}
+            </button>
+            <p className="text-center text-xs text-gray-600 mt-3">Cancel anytime · No contracts · Secure via Stripe</p>
           </div>
         </div>
 
-        {/* Compare note */}
-        <div className="max-w-4xl mx-auto mt-8 text-center">
-          <p style={{ fontFamily: 'DM Mono', fontSize: '10px', color: '#1F2937', letterSpacing: '1px' }}>
-            COMPARABLE TOOLS COST $80–$300/MO AND DELIVER FAR LESS · NXXT IS BUILT BY A 12-YEAR TRADER
-          </p>
-        </div>
-      </section>
-
-      {/* ── FAQ lite ─────────────────────────────────────────────────── */}
-      <section className="px-6 pb-24">
-        <div className="max-w-2xl mx-auto space-y-4">
+        {/* Value props */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mt-16">
           {[
-            { q: 'What does Free Trader get me?', a: 'One Hot Pick signal per day delivered at the NY Open (9:30 AM EST) when a qualifying setup is available. You can also browse all platform tabs in view-only mode to see exactly what Elite offers.' },
-            { q: 'Can I cancel Elite anytime?', a: 'Yes. No contracts, no questions asked. Cancel from your account settings and your access continues until the end of the billing period.' },
-            { q: 'How are signals generated?', a: 'A proprietary calibration of Claude AI (Anthropic\'s API) built by a 12-year futures trader scans 50 futures markets every hour using Smart Money Concepts — identifying Order Blocks, Liquidity Sweeps, and FVGs in real time.' },
-            { q: 'Is this financial advice?', a: 'No. NXXT Futures is an analytical tool. All signals are educational and informational. Always do your own research and trade responsibly.' },
-          ].map((faq, i) => (
-            <div key={i} className="p-5 rounded-2xl"
-              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: '14px', color: 'white', marginBottom: '8px' }}>
-                {faq.q}
+            { icon: Zap, color: 'text-cyan-400', bg: 'bg-cyan-500/10', title: 'Peak Hours Only', desc: 'London (3–7 AM EST) and NY (7–11 AM EST) only — where 80% of institutional volume lives.' },
+            { icon: Shield, color: 'text-yellow-400', bg: 'bg-yellow-500/10', title: 'SMC Methodology', desc: 'Every signal built on Order Blocks, FVGs, Liquidity, and multi-timeframe confluence.' },
+            { icon: TrendingUp, color: 'text-green-400', bg: 'bg-green-500/10', title: 'Any Account Size', desc: 'Standard and Micro contract sizing. Trade with $500 or $500,000 — signals work for both.' },
+          ].map(card => {
+            const Icon = card.icon;
+            return (
+              <div key={card.title} className="text-center p-6">
+                <div className={`inline-flex p-3 rounded-xl ${card.bg} mb-4`}><Icon className={`w-6 h-6 ${card.color}`} /></div>
+                <h4 className="font-bold mb-2">{card.title}</h4>
+                <p className="text-sm text-gray-400">{card.desc}</p>
               </div>
-              <div style={{ fontFamily: 'DM Sans', fontSize: '13px', color: 'rgba(148,163,184,0.8)', lineHeight: '1.6' }}>
-                {faq.a}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      </section>
+
+        {/* Education CTA */}
+        <div className="max-w-2xl mx-auto mt-12 p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-center">
+          <div className="text-3xl mb-3">🏅</div>
+          <h3 className="font-bold text-lg mb-2">Complete Futures Basics → Earn 50% Off</h3>
+          <p className="text-gray-400 text-sm mb-4">Free for all users. Finish all 8 sections and get <strong className="text-white">GRADUATE50</strong> — 50% off your first month. Valid 7 days.</p>
+          <button onClick={() => navigate('/futures-basics')} className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-xl text-amber-400 font-semibold text-sm transition-colors">
+            <BookOpen className="w-4 h-4" />Start Futures Basics →
+          </button>
+        </div>
+
+        {/* FAQ */}
+        <div className="mt-20">
+          <h2 className="text-2xl font-bold mb-8 text-center">Frequently Asked Questions</h2>
+          <div className="max-w-3xl mx-auto space-y-4">
+            {[
+              { q: 'When are signals generated?', a: 'NXXT Futures scans every hour during London (3–7 AM EST) and New York (7–11 AM EST) sessions, Monday through Friday. These are peak institutional liquidity windows.' },
+              { q: 'What futures markets are covered?', a: 'Equity indexes (ES, NQ, YM, RTY and micros MES, MNQ, MYM, M2K), metals (GC, SI and micros MGC, SIL), energy (CL, NG and micro MCL), FX futures, rates, and crypto futures.' },
+              { q: 'What are micro contracts?', a: 'Micro E-mini contracts are 1/10th the size of standard E-minis — same chart, same levels, smaller position value. Essential for smaller accounts. Elite users can toggle between standard and micro sizing on every signal card.' },
+              { q: 'How does the AI generate signals?', a: 'Each signal analyzes structure (BOS/CHoCH), order blocks, fair value gaps, and liquidity across 3 timeframes (Daily, 4H, 1H). We only output signals with 78%+ confidence where all three timeframes align.' },
+              { q: 'What is the GRADUATE50 promo?', a: 'Complete all 8 sections of Futures Basics (free for everyone) and earn 50% off your first month of Elite Trader. Code is emailed automatically and valid for 7 days.' },
+              { q: 'Can I cancel anytime?', a: 'Yes — cancel from your billing settings anytime. Access continues until end of your billing period.' },
+            ].map(item => (
+              <div key={item.q} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <h3 className="font-bold mb-2 text-white">{item.q}</h3>
+                <p className="text-gray-400 text-sm leading-relaxed">{item.a}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
