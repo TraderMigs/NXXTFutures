@@ -1,5 +1,5 @@
 // src/pages/PricingPage.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, ArrowLeft, Loader2, Zap, Shield, TrendingUp, BookOpen, Gift } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,9 +38,9 @@ export function PricingPage() {
 
   const isElite = profile?.subscription_tier === 'elite';
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = useCallback(async () => {
     if (!user) { navigate('/signup?tier=elite'); return; }
-    if (isElite) { navigate('/app'); return; } // A1 FIX: /dashboard has no Route — was sending users to homepage
+    if (isElite) { navigate('/app'); return; }
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session) { setError('Session expired. Please log out and log back in.'); return; }
     setLoading(true); setError('');
@@ -56,13 +56,23 @@ export function PricingPage() {
       setError(err instanceof Error ? err.message : 'Failed to start checkout');
       setLoading(false);
     }
-  };
+  }, [user, isElite, promoApplied, promoCode, navigate]);
+
+  // Auto-launch Elite checkout if user arrived via the pendingEliteUpgrade flow
+  useEffect(() => {
+    if (user && !isElite) {
+      const pending = localStorage.getItem('pendingEliteUpgrade');
+      if (pending) {
+        localStorage.removeItem('pendingEliteUpgrade');
+        handleSubscribe();
+      }
+    }
+  }, [user, isElite, handleSubscribe]);
 
   const handleGetStarted = () => {
     if (!user) { navigate('/signup?tier=free'); return; }
-    navigate('/app'); // A1 FIX: /dashboard has no Route — was sending users to homepage
+    navigate('/app');
   };
-
 
   // E3 FIX: Per-page browser tab title for UX and SEO
   useEffect(() => { document.title = 'Pricing — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
@@ -158,7 +168,7 @@ export function PricingPage() {
               <div className="mb-4 flex gap-2">
                 <input
                   type="text"
-                  placeholder="Promo code (e.g. Trader50)"
+                  placeholder="Enter promo code"
                   value={promoCode}
                   onChange={e => setPromoCode(e.target.value.toUpperCase())}
                   className="flex-1 px-3 py-2 bg-black border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-yellow-500"
