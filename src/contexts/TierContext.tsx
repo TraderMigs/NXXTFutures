@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
 interface TierContextType {
@@ -15,24 +14,12 @@ interface TierContextType {
 const TierContext = createContext<TierContextType | undefined>(undefined);
 
 export function TierProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const [tier, setTier]               = useState<'free' | 'elite'>('free');
-  const [isLoading, setIsLoading]     = useState(true);
+  const { profile } = useAuth();
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState('');
 
-  const fetchTier = useCallback(async () => {
-    if (!user) { setIsLoading(false); return; }
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('tier')
-      .eq('id', user.id)
-      .single();
-    if (data) setTier(data.tier as 'free' | 'elite');
-    setIsLoading(false);
-  }, [user]);
-
-  useEffect(() => { fetchTier(); }, [fetchTier]);
+  // Derive tier directly from profile — no extra DB call needed
+  const tier: 'free' | 'elite' = (profile?.subscription_tier === 'elite') ? 'elite' : 'free';
 
   const triggerUpgrade = useCallback((featureName = 'this feature') => {
     setUpgradeFeature(featureName);
@@ -45,7 +32,7 @@ export function TierProvider({ children }: { children: ReactNode }) {
     <TierContext.Provider value={{
       tier,
       isElite: tier === 'elite',
-      isLoading,
+      isLoading: false,
       showUpgrade,
       upgradeFeature,
       triggerUpgrade,
