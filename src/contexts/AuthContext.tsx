@@ -1,3 +1,4 @@
+// src/contexts/AuthContext.tsx
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -28,17 +29,19 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
+  updateEmail: (newEmail: string) => Promise<{ error: Error | null }>;
+  deleteAccount: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user,    setUser]    = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ── Load profile from DB ──────────────────────────────────
   const loadProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -54,13 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ── Refresh profile (called after payment / tier change) ──
   const refreshProfile = async () => {
     if (!user) return;
     await loadProfile(user.id);
   };
 
-  // ── Auth state listener ───────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -86,7 +87,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Sign in ───────────────────────────────────────────────
   const signIn = async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -97,7 +97,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ── Sign up ───────────────────────────────────────────────
   const signUp = async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signUp({ email, password });
@@ -109,11 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           is_admin: false,
           bypass_stripe: false,
         }, { onConflict: 'id' });
-
         await supabase.functions.invoke('send-email', {
           body: { type: 'welcome', email: email },
         });
-
         await loadProfile(data.user.id);
       }
       return { error };
@@ -122,7 +119,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ── Sign out ──────────────────────────────────────────────
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -130,16 +126,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
+  const updatePassword = async (newPassword: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      return { error };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
+  const updateEmail = async (newEmail: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      return { error };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
+  const deleteAccount = async () => {
+    try {
+      if (!user) return { error: new Error('Not logged in') };
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', user.id);
+      if (profileError) throw profileError;
+      await supabase.auth.signOut();
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
-      user,
-      session,
-      profile,
-      loading,
-      signIn,
-      signUp,
-      signOut,
-      refreshProfile,
+      user, session, profile, loading,
+      signIn, signUp, signOut, refreshProfile,
+      updatePassword, updateEmail, deleteAccount,
     }}>
       {children}
     </AuthContext.Provider>
