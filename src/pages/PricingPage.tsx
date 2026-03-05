@@ -158,7 +158,7 @@ export function PricingPage() {
               <div className="mb-4 flex gap-2">
                 <input
                   type="text"
-                  placeholder="Promo code (e.g. GRADUATE50)"
+                  placeholder="Promo code (e.g. Trader50)"
                   value={promoCode}
                   onChange={e => setPromoCode(e.target.value.toUpperCase())}
                   className="flex-1 px-3 py-2 bg-black border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-yellow-500"
