@@ -203,6 +203,10 @@ export function FuturesBasicsPage() {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-black"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-cyan-500" /></div>;
 
+
+  // E3 FIX: Per-page browser tab title for UX and SEO
+  useEffect(() => { document.title = 'Futures Basics — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
+
   return (
     <div className="min-h-screen bg-black text-white pb-20">
       <div className="max-w-4xl mx-auto px-4 py-8">

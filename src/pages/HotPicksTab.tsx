@@ -46,40 +46,57 @@ export function HotPicksTab() {
   const [sortBy,            setSortBy]            = useState<SortOption>('confidence');
 
   // ── Fetch active signals ──────────────────────────────────────────────────
+  // CRIT-02 FIX: Elite users query the table directly (RLS allows it).
+  // Free users call get_free_tier_signals() RPC which returns all signal
+  // metadata but NULLS OUT trade data (entry zones, TPs, SL) for locked
+  // signals — backend-enforced, not just cosmetic CSS blur.
   const fetchSignals = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true);
     try {
-      // Active signals
-      const { data: active, error: e1 } = await supabase
-        .from('futures_signals')
-        .select('*')
-        .in('status', ['ACTIVE'])
-        .order('confidence', { ascending: false })
-        .order('generated_at', { ascending: false });
+      let activeData: any[] | null = null;
+      let activeError: any = null;
 
-      if (!e1 && active) {
-        setSignals(active);
+      if (isElite) {
+        // Elite: direct table access, all fields returned
+        const { data, error } = await supabase
+          .from('futures_signals')
+          .select('*')
+          .in('status', ['ACTIVE'])
+          .order('confidence', { ascending: false })
+          .order('generated_at', { ascending: false });
+        activeData = data;
+        activeError = error;
+      } else {
+        // Free: use RPC — trade data is nulled on the server for locked signals
+        const { data, error } = await supabase.rpc('get_free_tier_signals');
+        activeData = data;
+        activeError = error;
+      }
+
+      if (!activeError && activeData) {
+        setSignals(activeData);
         setLastUpdated(new Date());
       }
 
-      // Today's closed signals (TP hit / stopped out / expired today)
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const { data: closed, error: e2 } = await supabase
-        .from('futures_signals')
-        .select('*')
-        .in('status', ['TP1_HIT', 'TP2_HIT', 'TP3_HIT', 'STOPPED_OUT', 'EXPIRED'])
-        .gte('status_updated_at', todayStart.toISOString())
-        .order('status_updated_at', { ascending: false })
-        .limit(20);
-
-      if (!e2 && closed) setClosedSignals(closed);
+      // Today's closed signals — Elite only (free users don't see history)
+      if (isElite) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const { data: closed, error: e2 } = await supabase
+          .from('futures_signals')
+          .select('*')
+          .in('status', ['TP1_HIT', 'TP2_HIT', 'TP3_HIT', 'STOPPED_OUT', 'EXPIRED'])
+          .gte('status_updated_at', todayStart.toISOString())
+          .order('status_updated_at', { ascending: false })
+          .limit(20);
+        if (!e2 && closed) setClosedSignals(closed);
+      }
 
     } finally {
       setLoading(false);
       if (showRefreshing) setRefreshing(false);
     }
-  }, []);
+  }, [isElite]);
 
   useEffect(() => {
     fetchSignals();
@@ -156,6 +173,9 @@ export function HotPicksTab() {
   const filtered = applySort(applyFilters(signals));
 
   // Free tier logic
+  // CRIT-02 FIX: For free users, signals come from get_free_tier_signals() RPC.
+  // The is_locked field is set by the server — locked signals have null trade data.
+  // We use this to split visible vs locked for the blur teaser UI.
   const getNYOpenSignal = (sigs: FuturesSignal[]) => {
     const now = new Date();
     const nyOpenUTC = new Date(now);
@@ -167,9 +187,11 @@ export function HotPicksTab() {
     return afterOpen[0] || sigs.sort((a, b) => b.confidence - a.confidence)[0] || null;
   };
 
-  const freeSignal     = !isElite ? getNYOpenSignal(filtered) : null;
+  // CRIT-02 FIX: For free users, is_locked comes from the RPC function (server-enforced).
+  // For elite users, nothing is locked.
+  const freeSignal     = !isElite ? filtered.find((s: any) => !s.is_locked) || null : null;
   const visibleSignals = isElite ? filtered : (freeSignal ? [freeSignal] : []);
-  const lockedSignals  = !isElite ? filtered.filter(s => s.id !== freeSignal?.id) : [];
+  const lockedSignals  = !isElite ? filtered.filter((s: any) => s.is_locked) : [];
 
   const buys     = filtered.filter(s => s.direction === 'BUY').length;
   const sells    = filtered.filter(s => s.direction === 'SELL').length;

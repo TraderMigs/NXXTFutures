@@ -1,0 +1,9 @@
+# E1 FIX: robots.txt — prevent search engines indexing the private app shell
+User-agent: *
+Disallow: /app
+Allow: /
+Allow: /pricing
+Allow: /futures-basics
+Allow: /login
+Allow: /signup
+Sitemap: https://www.nxxtfutures.com/sitemap.xml

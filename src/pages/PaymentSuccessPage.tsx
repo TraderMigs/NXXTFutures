@@ -13,6 +13,7 @@ export function PaymentSuccessPage() {
   const [polling, setPolling] = useState(true);
 
   useEffect(() => {
+    // A1 FIX: Skip polling if no user session — prevents blank screen loop
     if (!user) { setPolling(false); return; }
     if (profile?.subscription_tier === 'elite') { setConfirmed(true); setPolling(false); return; }
 
@@ -36,6 +37,10 @@ export function PaymentSuccessPage() {
     const interval = setInterval(async () => { const done = await poll(); if (done) clearInterval(interval); }, 2000);
     return () => clearInterval(interval);
   }, [user, profile]);
+
+
+  // E3 FIX: Per-page browser tab title for UX and SEO
+  useEffect(() => { document.title = 'Payment Confirmed — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
 
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
@@ -72,7 +77,8 @@ export function PaymentSuccessPage() {
                 </ul>
               </div>
             )}
-            <button onClick={() => navigate('/dashboard')} className="w-full py-3.5 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold rounded-xl transition-all">Go to Dashboard →</button>
+            {/* A1 FIX: was navigate('/dashboard') — that route does not exist */}
+            <button onClick={() => navigate('/app')} className="w-full py-3.5 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold rounded-xl transition-all">Go to Dashboard →</button>
             <button onClick={() => navigate('/futures-basics')} className="w-full py-3 bg-gray-900 hover:bg-gray-800 border border-gray-700 text-gray-300 font-medium rounded-xl transition-all text-sm">Start Futures Basics Education</button>
           </div>
         )}

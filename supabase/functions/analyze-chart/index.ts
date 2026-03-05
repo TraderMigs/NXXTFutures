@@ -260,13 +260,60 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return new Response(JSON.stringify({ error: 'No authorization' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    // Decode user ID directly from JWT payload (no round-trip needed)
-    let userId = 'unknown';
-    try {
-      const token = authHeader.replace('Bearer ', '');
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      userId = payload.sub || 'unknown';
-    } catch { /* non-critical, still proceed */ }
+    // A5 FIX: Use Supabase getUser() for signature-verified JWT authentication.
+    // Previous code manually decoded JWT payload without verifying the signature —
+    // an attacker could craft a fake JWT with any sub value to spoof user identity.
+    const supabaseForAuth = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+    const { data: { user: callingUser }, error: authError } = await supabaseForAuth.auth.getUser();
+    if (authError || !callingUser) {
+      return new Response(JSON.stringify({ error: 'Invalid session' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const userId = callingUser.id;
+
+    // B4 FIX: Rate limiting — free tier capped at 3 analyses per day, elite unlimited.
+    // D1 FIX: Free tier completely blocked from AI analysis (Elite-only feature per pricing page).
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    const { data: userProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('subscription_tier')
+      .eq('id', userId)
+      .single();
+
+    const isElite = userProfile?.subscription_tier === 'elite';
+
+    // D1 FIX: Block free users from this endpoint entirely
+    if (!isElite) {
+      return new Response(
+        JSON.stringify({ error: 'AI Data Analysis is an Elite Trader feature. Upgrade at /pricing to unlock unlimited on-demand scans.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // B4 FIX: Even elite users get a generous daily cap (50/day) to prevent abuse
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const { count: dailyCount } = await supabaseAdmin
+      .from('data_analyses')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('created_at', todayStart.toISOString());
+
+    const dailyLimit = 50; // Elite daily cap
+    if ((dailyCount ?? 0) >= dailyLimit) {
+      return new Response(
+        JSON.stringify({ error: `Daily analysis limit reached (${dailyLimit}/day). Resets at midnight UTC.` }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const body = await req.json();
     const symbol: string    = (body.symbol || 'ES').toUpperCase();
@@ -357,12 +404,7 @@ Return ONLY valid JSON with no markdown.`;
     ai.chart_high    = ai.chart_high || chartHigh;
     ai.chart_low     = ai.chart_low  || chartLow;
 
-    // Save to Supabase
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
+    // Save to Supabase (supabaseAdmin already created above for auth checks)
     const { data: saved } = await supabaseAdmin.from('data_analyses').insert({
       user_id:         userId,
       symbol:          ai.pair,

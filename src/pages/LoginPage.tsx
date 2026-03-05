@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,9 +12,11 @@ export function LoginPage() {
   const { signIn, user } = useAuth();
   const navigate = useNavigate();
 
+  // B2 FIX: was calling navigate() directly in render body — React anti-pattern
+  // that causes "Cannot update a component from inside the function body" warnings
+  // and potential render loops. Using <Navigate> component instead.
   if (user) {
-    navigate('/app');
-    return null;
+    return <Navigate to="/app" replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,6 +41,10 @@ export function LoginPage() {
       setLoading(false);
     }
   };
+
+
+  // E3 FIX: Per-page browser tab title for UX and SEO
+  useEffect(() => { document.title = 'Sign In — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
 
   return (
     <div className="min-h-screen bg-[#0A0B0D] flex items-center justify-center p-4">

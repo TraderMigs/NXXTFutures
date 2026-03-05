@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useCallback, useState, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 
 interface TierContextType {
@@ -14,7 +14,7 @@ interface TierContextType {
 const TierContext = createContext<TierContextType | undefined>(undefined);
 
 export function TierProvider({ children }: { children: ReactNode }) {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState('');
 
@@ -32,7 +32,10 @@ export function TierProvider({ children }: { children: ReactNode }) {
     <TierContext.Provider value={{
       tier,
       isElite: tier === 'elite',
-      isLoading: false,
+      // C4 FIX: was hardcoded false — Elite users briefly saw Free UI on load.
+      // Now correctly reflects AuthContext's loading state so tier is only
+      // determined once the profile has actually loaded from the database.
+      isLoading: authLoading,
       showUpgrade,
       upgradeFeature,
       triggerUpgrade,

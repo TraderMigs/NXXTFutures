@@ -40,7 +40,7 @@ export function PricingPage() {
 
   const handleSubscribe = async () => {
     if (!user) { navigate('/signup?tier=elite'); return; }
-    if (isElite) { navigate('/dashboard'); return; }
+    if (isElite) { navigate('/app'); return; } // A1 FIX: /dashboard has no Route — was sending users to homepage
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session) { setError('Session expired. Please log out and log back in.'); return; }
     setLoading(true); setError('');
@@ -60,14 +60,18 @@ export function PricingPage() {
 
   const handleGetStarted = () => {
     if (!user) { navigate('/signup?tier=free'); return; }
-    navigate('/dashboard');
+    navigate('/app'); // A1 FIX: /dashboard has no Route — was sending users to homepage
   };
+
+
+  // E3 FIX: Per-page browser tab title for UX and SEO
+  useEffect(() => { document.title = 'Pricing — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
 
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="container mx-auto max-w-5xl px-4 pt-16 pb-20">
         <div className="mb-8">
-          <button onClick={() => navigate(user ? '/dashboard' : '/')} className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+          <button onClick={() => navigate(user ? '/app' : '/')} className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" />Back to {user ? 'Dashboard' : 'Home'}
           </button>
         </div>

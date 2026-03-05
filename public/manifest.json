@@ -2,7 +2,7 @@
   "name": "NXXT Futures",
   "short_name": "NXXT",
   "description": "AI-powered SMC futures trading analysis and signals",
-  "start_url": "/",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#0A0B0D",
   "theme_color": "#F59E0B",
@@ -61,24 +61,15 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshots/mobile-1.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "NXXT Futures Hot Picks"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Hot Picks",
-      "url": "/app?tab=hot-picks",
+      "url": "/app",
       "description": "View live AI signals"
     },
     {
       "name": "Data Analysis",
-      "url": "/app?tab=data-analysis",
+      "url": "/app",
       "description": "Analyze futures charts"
     }
   ]

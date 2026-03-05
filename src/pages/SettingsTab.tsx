@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import {
   User, Lock, Mail, Crown, Trash2, LogOut, CheckCircle,
-  AlertTriangle, ChevronRight, Shield, Eye, EyeOff, Loader2
+  AlertTriangle, ChevronRight, Eye, EyeOff, Loader2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -15,11 +15,15 @@ export function SettingsTab() {
 
   // ── Change Password ───────────────────────────────────────
   const [pwSection,   setPwSection]   = useState(false);
-  const [curPw,       setCurPw]       = useState('');
+  // B3 FIX: Removed dead `curPw` state — Supabase updateUser() uses the session
+  // token for auth, it does NOT need the current password. That input was
+  // collecting data that was never used. Also renamed showCurPw → showConfPw
+  // because the variable was (incorrectly) controlling the CONFIRM field, not
+  // a non-existent "current password" field, causing confusion.
   const [newPw,       setNewPw]       = useState('');
   const [confPw,      setConfPw]      = useState('');
-  const [showCurPw,   setShowCurPw]   = useState(false);
   const [showNewPw,   setShowNewPw]   = useState(false);
+  const [showConfPw,  setShowConfPw]  = useState(false);
   const [pwLoading,   setPwLoading]   = useState(false);
   const [pwMsg,       setPwMsg]       = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -50,7 +54,7 @@ export function SettingsTab() {
     setPwLoading(false);
     if (error) { setPwMsg({ ok: false, text: error.message || 'Failed to update password.' }); return; }
     setPwMsg({ ok: true, text: 'Password updated successfully.' });
-    setCurPw(''); setNewPw(''); setConfPw('');
+    setNewPw(''); setConfPw('');
   };
 
   const handleChangeEmail = async () => {
@@ -209,20 +213,20 @@ export function SettingsTab() {
               </button>
             </div>
           </div>
-          {/* Confirm Password */}
+          {/* Confirm New Password — B3 FIX: showConfPw now correctly controls THIS field */}
           <div>
             <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider">Confirm New Password</label>
             <div className="relative">
               <input
-                type={showCurPw ? 'text' : 'password'}
+                type={showConfPw ? 'text' : 'password'}
                 value={confPw}
                 onChange={e => setConfPw(e.target.value)}
                 placeholder="••••••••"
                 className={inputClass}
               />
-              <button type="button" onClick={() => setShowCurPw(o => !o)}
+              <button type="button" onClick={() => setShowConfPw(o => !o)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
-                {showCurPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showConfPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -298,7 +302,11 @@ export function SettingsTab() {
       >
         <div className="space-y-3">
           <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 leading-relaxed">
-            <strong>This is permanent.</strong> Your account, all journal entries, analysis history, and education progress will be deleted immediately and cannot be recovered. If you have an active Elite subscription, cancel it in Stripe first.
+            <strong>This is permanent.</strong> Your account, all journal entries, analysis history, and education progress will be deleted immediately and cannot be recovered.
+            {/* A3 FIX: Stripe subscription is now cancelled automatically before deletion */}
+            {isElite && (
+              <span className="block mt-1">Your Elite subscription will be cancelled automatically when you delete your account.</span>
+            )}
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider">Type DELETE to confirm</label>

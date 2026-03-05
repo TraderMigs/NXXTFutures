@@ -108,9 +108,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           is_admin: false,
           bypass_stripe: false,
         }, { onConflict: 'id' });
-        await supabase.functions.invoke('send-email', {
-          body: { type: 'welcome', email: email },
-        });
+
+        // A4 FIX: send-email edge function does not exist yet — wrapped in try/catch
+        // so signup never fails because of a missing welcome email function.
+        try {
+          await supabase.functions.invoke('send-email', {
+            body: { type: 'welcome', email: email },
+          });
+        } catch {
+          // Non-critical: welcome email failure should not block account creation
+          console.warn('send-email edge function not available — welcome email skipped');
+        }
+
         await loadProfile(data.user.id);
       }
       return { error };
@@ -147,6 +156,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const deleteAccount = async () => {
     try {
       if (!user) return { error: new Error('Not logged in') };
+
+      // A3 FIX: Cancel Stripe subscription BEFORE deleting profile.
+      // Without this, Stripe keeps charging the user even after their account is gone.
+      const currentProfile = profile;
+      if (currentProfile?.stripe_subscription_id) {
+        try {
+          await supabase.functions.invoke('cancel-stripe-subscription', {
+            body: { subscription_id: currentProfile.stripe_subscription_id },
+          });
+        } catch (cancelErr) {
+          // Log but don't block account deletion if cancellation fails.
+          // Admin should be notified to manually cancel in Stripe dashboard.
+          console.error('Stripe cancellation failed during account deletion:', cancelErr);
+        }
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
         .delete()

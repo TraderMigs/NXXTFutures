@@ -125,6 +125,8 @@ async function fetchSymbolData(symbol: string): Promise<{
     };
   } catch (err) {
     console.error(`fetchSymbolData failed for ${symbol}:`, err);
+    // D2: Yahoo Finance errors are logged here — admin notification sent from main handler
+    // if total Yahoo failures exceed threshold (see results.yahoo_errors tracking below)
     return null;
   }
 }
@@ -325,6 +327,31 @@ async function saveSignal(signal: any, supabase: any): Promise<void> {
   const cfg = FUTURES_CONFIGS[signal.symbol];
   const entryMid = (signal.entry_zone_min + signal.entry_zone_max) / 2;
 
+  // B1 FIX: Duplicate signal guard — if an ACTIVE signal already exists for this
+  // symbol+direction with a similar entry zone (within 0.5% price tolerance),
+  // update its generated_at timestamp instead of inserting a duplicate.
+  // Without this, the hourly scanner could stack 8 identical ES BUY signals in a day.
+  const entryTolerance = entryMid * 0.005; // 0.5% tolerance
+  const { data: existing } = await supabase
+    .from('futures_signals')
+    .select('id, generated_at')
+    .eq('symbol', signal.symbol)
+    .eq('direction', signal.direction)
+    .eq('status', 'ACTIVE')
+    .gte('entry_zone_min', signal.entry_zone_min - entryTolerance)
+    .lte('entry_zone_max', signal.entry_zone_max + entryTolerance)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    // Refresh the existing signal's timestamp instead of creating a duplicate
+    await supabase
+      .from('futures_signals')
+      .update({ generated_at: new Date().toISOString(), confidence: signal.confidence })
+      .eq('id', existing[0].id);
+    console.log(`Duplicate guard: refreshed existing ${signal.symbol} ${signal.direction} signal (id: ${existing[0].id})`);
+    return;
+  }
+
   const tp1_points = calculatePoints(entryMid, signal.tp1, signal.direction, signal.symbol);
   const tp2_points = calculatePoints(entryMid, signal.tp2, signal.direction, signal.symbol);
   const tp3_points = calculatePoints(entryMid, signal.tp3, signal.direction, signal.symbol);
@@ -452,6 +479,7 @@ Deno.serve(async (req: Request) => {
       signals_found: 0,
       signals_saved: 0,
       errors: 0,
+      yahoo_errors: 0, // D2: tracks Yahoo Finance fetch failures specifically
       symbols_with_signals: [] as string[],
     };
 
@@ -475,11 +503,32 @@ Deno.serve(async (req: Request) => {
       } catch (err) {
         console.error(`Error scanning ${symbol}:`, err);
         results.errors++;
+        if (err instanceof Error && err.message.includes('Yahoo Finance')) {
+          results.yahoo_errors++;
+        }
       }
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`Scan complete in ${elapsed}s:`, results);
+
+    // D2 FIX: If Yahoo Finance failed for majority of symbols, insert an admin notification
+    // so the admin dashboard surfaces the outage instead of silently generating no signals.
+    if (results.yahoo_errors >= 5) {
+      try {
+        await supabaseAdmin.from('admin_notifications').insert({
+          type: 'SYSTEM_ERROR',
+          title: 'Yahoo Finance API Degraded',
+          message: `Hot Picks Scanner: ${results.yahoo_errors}/${results.scanned} symbols failed with Yahoo Finance errors. Signals may be missing. Check Yahoo Finance availability or consider switching to an alternative data provider.`,
+          severity: 'HIGH',
+          created_at: new Date().toISOString(),
+          read: false,
+        });
+        console.log('Admin notification sent: Yahoo Finance degraded');
+      } catch (notifErr) {
+        console.error('Failed to insert admin notification:', notifErr);
+      }
+    }
 
     return new Response(
       JSON.stringify({

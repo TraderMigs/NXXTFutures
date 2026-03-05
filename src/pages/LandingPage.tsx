@@ -208,6 +208,10 @@ function SpaceCanvas() {
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
   }, []);
 
+
+  // E3 FIX: Per-page browser tab title for UX and SEO
+  useEffect(() => { document.title = 'NXXT Futures — AI-Powered SMC Futures Signals'; return () => { document.title = 'NXXT Futures'; }; }, []);
+
   return (
     <canvas ref={canvasRef}
       className="fixed inset-0 w-full h-full pointer-events-none"
