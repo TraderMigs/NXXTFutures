@@ -16,7 +16,6 @@ export function SignupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Read ?tier=elite from URL
   const tierParam = searchParams.get('tier');
   const isEliteIntent = tierParam === 'elite';
 
@@ -53,14 +52,9 @@ export function SignupPage() {
         }
         return;
       }
-
-      // If they came from the Elite upgrade path, store the intent.
-      // After email confirmation + login, LoginPage will redirect to /pricing
-      // which auto-launches the Stripe checkout.
       if (isEliteIntent) {
         localStorage.setItem('pendingEliteUpgrade', '1');
       }
-
       setDone(true);
     } catch {
       setError('Something went wrong. Try again.');
@@ -71,13 +65,11 @@ export function SignupPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0B0D] flex items-center justify-center p-4">
-      {/* Ambient glow */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-amber-500/5 rounded-full blur-[120px]" />
       </div>
 
       <div className="relative w-full max-w-sm">
-        {/* Back button */}
         <button onClick={() => navigate('/')}
           className="flex items-center gap-2 mb-6 text-gray-600 hover:text-gray-300 transition-all text-sm"
           style={{ fontFamily: 'DM Sans' }}>
@@ -85,7 +77,6 @@ export function SignupPage() {
           Back to Home
         </button>
 
-        {/* Logo */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-6">
             <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center">
@@ -103,7 +94,6 @@ export function SignupPage() {
           )}
         </div>
 
-        {/* Success state */}
         {done ? (
           <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-8 text-center">
             <div className="inline-flex p-3 bg-green-500/20 rounded-full mb-4">
@@ -126,7 +116,6 @@ export function SignupPage() {
             </button>
           </div>
         ) : (
-          /* Sign-up card */
           <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-8">
             {isEliteIntent && (
               <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
@@ -136,7 +125,6 @@ export function SignupPage() {
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
 
-              {/* Email */}
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
                   Email
@@ -154,7 +142,6 @@ export function SignupPage() {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
                   Password
@@ -180,7 +167,6 @@ export function SignupPage() {
                 </div>
               </div>
 
-              {/* Confirm Password */}
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
                   Confirm Password
@@ -205,7 +191,6 @@ export function SignupPage() {
                 </div>
               </div>
 
-              {/* Error */}
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
                   <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -213,7 +198,6 @@ export function SignupPage() {
                 </div>
               )}
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={loading}
