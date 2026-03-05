@@ -425,6 +425,7 @@ function JournalCard({ entry, onFeedbackSaved, onDelete }: {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export function TradingJournalTab({ prefillAnalysis }: { prefillAnalysis?: DataAnalysis | null }) {
+  const { isElite, triggerUpgrade } = useTier();
   const [entries,    setEntries]    = useState<JournalEntry[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [showForm,   setShowForm]   = useState(false);
