@@ -201,11 +201,15 @@ export function FuturesBasicsPage() {
     } catch (err) { console.error('Error handling badge:', err); }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-black"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-cyan-500" /></div>;
-
-
-  // E3 FIX: Per-page browser tab title for UX and SEO
+  // E3 FIX: useEffect MUST come before any early return — Rules of Hooks.
+  // Previously this was placed AFTER the if(loading) guard below, which caused
+  // React #310: render 1 (loading=true) skipped this hook → N hooks total.
+  // Render 2 (loading=false) reached it → N+1 hooks → crash.
+  // FuturesBasicsPage is always mounted by AppShell (CSS block/hidden), so this
+  // fires on every login even when the Education tab isn't visible.
   useEffect(() => { document.title = 'Futures Basics — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-black"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-cyan-500" /></div>;
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
