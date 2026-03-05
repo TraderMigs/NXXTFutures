@@ -16,6 +16,9 @@ export function AccountPanel({ onSettingsChange }: AccountPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   // Load saved settings on mount
+  // FIX: .maybeSingle() instead of .single() — .single() throws 406 when no row
+  // exists yet (new users who haven't saved settings). .maybeSingle() returns
+  // null safely so we just keep the defaults.
   useEffect(() => {
     if (!user) return;
     const load = async () => {
@@ -23,7 +26,7 @@ export function AccountPanel({ onSettingsChange }: AccountPanelProps) {
         .from('account_settings')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
       if (data) {
         setBalance(data.account_balance.toString());
         setRiskPercent(data.risk_percent.toString());
@@ -31,7 +34,7 @@ export function AccountPanel({ onSettingsChange }: AccountPanelProps) {
       }
     };
     load();
-  }, [user]);
+  }, [user, onSettingsChange]);
 
   const handleSave = async () => {
     if (!user) return;

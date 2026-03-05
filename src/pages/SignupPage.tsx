@@ -15,8 +15,14 @@ export function SignupPage() {
   const { signUp, user } = useAuth();
   const navigate = useNavigate();
 
-  // B2 FIX: was calling navigate() directly in render body — React anti-pattern.
-  // Using <Navigate> component instead.
+  // E3 FIX: useEffect MUST come before any conditional return — Rules of Hooks.
+  // Previous version had this AFTER the if(user) check which caused React error #300.
+  useEffect(() => {
+    document.title = 'Create Account — NXXT Futures';
+    return () => { document.title = 'NXXT Futures'; };
+  }, []);
+
+  // B2 FIX: Using <Navigate> component instead of navigate() in render body
   if (user) {
     return <Navigate to="/app" replace />;
   }
@@ -53,9 +59,6 @@ export function SignupPage() {
     }
   };
 
-
-  // E3 FIX: Per-page browser tab title for UX and SEO
-  useEffect(() => { document.title = 'Create Account — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
 
   return (
     <div className="min-h-screen bg-[#0A0B0D] flex items-center justify-center p-4">

@@ -12,9 +12,14 @@ export function LoginPage() {
   const { signIn, user } = useAuth();
   const navigate = useNavigate();
 
-  // B2 FIX: was calling navigate() directly in render body — React anti-pattern
-  // that causes "Cannot update a component from inside the function body" warnings
-  // and potential render loops. Using <Navigate> component instead.
+  // E3 FIX: useEffect MUST come before any conditional return — Rules of Hooks.
+  // Previous version had this AFTER the if(user) check which caused React error #300.
+  useEffect(() => {
+    document.title = 'Sign In — NXXT Futures';
+    return () => { document.title = 'NXXT Futures'; };
+  }, []);
+
+  // B2 FIX: Using <Navigate> component instead of navigate() in render body
   if (user) {
     return <Navigate to="/app" replace />;
   }
@@ -42,26 +47,19 @@ export function LoginPage() {
     }
   };
 
-
-  // E3 FIX: Per-page browser tab title for UX and SEO
-  useEffect(() => { document.title = 'Sign In — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
-
   return (
     <div className="min-h-screen bg-[#0A0B0D] flex items-center justify-center p-4">
-      {/* Ambient glow */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-amber-500/5 rounded-full blur-[120px]" />
       </div>
 
       <div className="relative w-full max-w-sm">
-        {/* Back button */}
         <button onClick={() => navigate('/')}
           className="flex items-center gap-2 mb-6 text-gray-600 hover:text-gray-300 transition-all text-sm"
           style={{ fontFamily: 'DM Sans' }}>
           <ArrowLeft className="w-4 h-4" />
           Back to Home
         </button>
-        {/* Logo */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-6">
             <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center">
@@ -75,14 +73,10 @@ export function LoginPage() {
           <p className="text-gray-500 text-sm">Access restricted. Sign in to continue.</p>
         </div>
 
-        {/* Card */}
         <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Email */}
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-                Email
-              </label>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Email</label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
                 <input
@@ -96,11 +90,8 @@ export function LoginPage() {
               </div>
             </div>
 
-            {/* Password */}
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-                Password
-              </label>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
                 <input
@@ -121,7 +112,6 @@ export function LoginPage() {
               </div>
             </div>
 
-            {/* Error */}
             {error && (
               <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
                 <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -129,7 +119,6 @@ export function LoginPage() {
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -140,24 +129,15 @@ export function LoginPage() {
                   <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                   Signing in...
                 </>
-              ) : (
-                'Enter Terminal'
-              )}
+              ) : 'Enter Terminal'}
             </button>
           </form>
         </div>
 
-        <p className="text-center text-gray-700 text-xs mt-6">
-          Private use only · NXXTFutures.com
-        </p>
+        <p className="text-center text-gray-700 text-xs mt-6">Private use only · NXXTFutures.com</p>
         <div className="text-center mt-4">
-          <span style={{ fontFamily: 'DM Sans', fontSize: '13px', color: '#4B5563' }}>
-            Don&apos;t have an account?{' '}
-          </span>
-          <button onClick={() => navigate('/pricing')}
-            style={{ fontFamily: 'DM Sans', fontSize: '13px', color: '#F59E0B', textDecoration: 'underline' }}>
-            Start here
-          </button>
+          <span style={{ fontFamily: 'DM Sans', fontSize: '13px', color: '#4B5563' }}>Don&apos;t have an account?{' '}</span>
+          <button onClick={() => navigate('/pricing')} style={{ fontFamily: 'DM Sans', fontSize: '13px', color: '#F59E0B', textDecoration: 'underline' }}>Start here</button>
         </div>
       </div>
     </div>
