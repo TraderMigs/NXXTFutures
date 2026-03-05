@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
+import { SignupPage } from './pages/SignupPage';
 import { AppShell } from './pages/AppShell';
 import { LandingPage } from './pages/LandingPage';
 import { PricingPage } from './pages/PricingPage';
@@ -16,6 +17,7 @@ export default function App() {
           <Routes>
             <Route path="/"                element={<LandingPage />} />
             <Route path="/pricing"         element={<PricingPage />} />
+            <Route path="/signup"          element={<SignupPage />} />
             <Route path="/futures-basics"  element={<FuturesBasicsPage />} />
             <Route path="/payment-success" element={<PaymentSuccessPage />} />
             <Route path="/login"           element={<LoginPage />} />
