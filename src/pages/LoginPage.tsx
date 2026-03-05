@@ -12,14 +12,11 @@ export function LoginPage() {
   const { signIn, user } = useAuth();
   const navigate = useNavigate();
 
-  // E3 FIX: useEffect MUST come before any conditional return — Rules of Hooks.
-  // Previous version had this AFTER the if(user) check which caused React error #300.
   useEffect(() => {
     document.title = 'Sign In — NXXT Futures';
     return () => { document.title = 'NXXT Futures'; };
   }, []);
 
-  // B2 FIX: Using <Navigate> component instead of navigate() in render body
   if (user) {
     return <Navigate to="/app" replace />;
   }
@@ -39,7 +36,15 @@ export function LoginPage() {
         }
         return;
       }
-      navigate('/app');
+      // If user came through Elite signup intent, send them to /pricing
+      // which will auto-launch Stripe checkout since they're now logged in.
+      const pendingElite = localStorage.getItem('pendingEliteUpgrade');
+      if (pendingElite) {
+        localStorage.removeItem('pendingEliteUpgrade');
+        navigate('/pricing');
+      } else {
+        navigate('/app');
+      }
     } catch {
       setError('Something went wrong. Try again.');
     } finally {
