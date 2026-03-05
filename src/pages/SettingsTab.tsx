@@ -1,25 +1,15 @@
 // src/pages/SettingsTab.tsx
-// NXXT Futures — User Settings
-
 import { useState } from 'react';
-import {
-  User, Lock, Mail, Crown, Trash2, LogOut, CheckCircle,
-  AlertTriangle, ChevronRight, Eye, EyeOff, Loader2
-} from 'lucide-react';
+import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, LogOut, Trash2, Crown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export function SettingsTab() {
-  const { profile, user, signOut, updatePassword, updateEmail, deleteAccount } = useAuth();
+  const { profile, user, signOut, updatePassword, deleteAccount } = useAuth();
   const navigate = useNavigate();
 
   // ── Change Password ───────────────────────────────────────
   const [pwSection,   setPwSection]   = useState(false);
-  // B3 FIX: Removed dead `curPw` state — Supabase updateUser() uses the session
-  // token for auth, it does NOT need the current password. That input was
-  // collecting data that was never used. Also renamed showCurPw → showConfPw
-  // because the variable was (incorrectly) controlling the CONFIRM field, not
-  // a non-existent "current password" field, causing confusion.
   const [newPw,       setNewPw]       = useState('');
   const [confPw,      setConfPw]      = useState('');
   const [showNewPw,   setShowNewPw]   = useState(false);
@@ -27,25 +17,13 @@ export function SettingsTab() {
   const [pwLoading,   setPwLoading]   = useState(false);
   const [pwMsg,       setPwMsg]       = useState<{ ok: boolean; text: string } | null>(null);
 
-  // ── Change Email ──────────────────────────────────────────
-  const [emSection,   setEmSection]   = useState(false);
-  const [newEmail,    setNewEmail]    = useState('');
-  const [emLoading,   setEmLoading]   = useState(false);
-  const [emMsg,       setEmMsg]       = useState<{ ok: boolean; text: string } | null>(null);
-
   // ── Delete Account ────────────────────────────────────────
   const [delSection,  setDelSection]  = useState(false);
   const [delConfirm,  setDelConfirm]  = useState('');
   const [delLoading,  setDelLoading]  = useState(false);
   const [delMsg,      setDelMsg]      = useState<{ ok: boolean; text: string } | null>(null);
 
-  const isElite = profile?.subscription_tier === 'elite';
-  const joinDate = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-    : '—';
-
-  // ── Handlers ──────────────────────────────────────────────
-  const handleChangePassword = async () => {
+  const handlePasswordChange = async () => {
     setPwMsg(null);
     if (newPw.length < 8) { setPwMsg({ ok: false, text: 'Password must be at least 8 characters.' }); return; }
     if (newPw !== confPw) { setPwMsg({ ok: false, text: 'Passwords do not match.' }); return; }
@@ -57,17 +35,6 @@ export function SettingsTab() {
     setNewPw(''); setConfPw('');
   };
 
-  const handleChangeEmail = async () => {
-    setEmMsg(null);
-    if (!newEmail.includes('@')) { setEmMsg({ ok: false, text: 'Enter a valid email address.' }); return; }
-    setEmLoading(true);
-    const { error } = await updateEmail(newEmail);
-    setEmLoading(false);
-    if (error) { setEmMsg({ ok: false, text: error.message || 'Failed to update email.' }); return; }
-    setEmMsg({ ok: true, text: 'Confirmation sent to your new email. Click the link to confirm the change.' });
-    setNewEmail('');
-  };
-
   const handleDeleteAccount = async () => {
     setDelMsg(null);
     if (delConfirm !== 'DELETE') { setDelMsg({ ok: false, text: 'Type DELETE (all caps) to confirm.' }); return; }
@@ -75,107 +42,58 @@ export function SettingsTab() {
     const { error } = await deleteAccount();
     setDelLoading(false);
     if (error) { setDelMsg({ ok: false, text: error.message || 'Failed to delete account. Contact support.' }); return; }
+    navigate('/');
+  };
+
+  const handleSignOut = async () => {
     await signOut();
     navigate('/');
   };
 
-  // ── Reusable message box ──────────────────────────────────
-  const Msg = ({ msg }: { msg: { ok: boolean; text: string } }) => (
-    <div className={`flex items-start gap-2 p-3 rounded-xl text-sm mt-3 ${
-      msg.ok
-        ? 'bg-green-500/10 border border-green-500/20 text-green-400'
-        : 'bg-red-500/10 border border-red-500/20 text-red-400'
-    }`}>
-      {msg.ok
-        ? <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        : <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
-      {msg.text}
-    </div>
-  );
-
-  // ── Section card ──────────────────────────────────────────
-  const Section = ({
-    icon, title, subtitle, open, onToggle, danger = false, children
-  }: {
-    icon: React.ReactNode;
-    title: string;
-    subtitle: string;
-    open: boolean;
-    onToggle: () => void;
-    danger?: boolean;
-    children: React.ReactNode;
-  }) => (
-    <div className={`bg-[#111318] border rounded-2xl overflow-hidden transition-all ${
-      danger ? 'border-red-500/20' : 'border-[#1E2128]'
-    }`}>
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/3 transition-all text-left"
-      >
-        <div className={`p-2 rounded-xl flex-shrink-0 ${danger ? 'bg-red-500/10' : 'bg-amber-500/10'}`}>
-          <span className={danger ? 'text-red-400' : 'text-amber-400'}>{icon}</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className={`font-display font-semibold text-sm ${danger ? 'text-red-400' : 'text-white'}`}>{title}</div>
-          <div className="text-xs text-gray-500 mt-0.5">{subtitle}</div>
-        </div>
-        <ChevronRight className={`w-4 h-4 text-gray-600 transition-transform ${open ? 'rotate-90' : ''}`} />
-      </button>
-      {open && (
-        <div className="px-5 pb-5 border-t border-[#1E2128] pt-4">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-
-  const inputClass = "w-full bg-[#0A0B0D] border border-[#1E2128] rounded-xl pl-4 pr-10 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all";
-  const btnPrimary = "flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-black font-display font-bold text-sm rounded-xl transition-all";
-  const btnDanger  = "flex items-center justify-center gap-2 px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-display font-semibold text-sm rounded-xl transition-all";
+  const isElite = profile?.subscription_tier === 'elite';
+  const joinDate = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : '—';
 
   return (
     <div className="max-w-xl mx-auto px-4 py-8 space-y-4">
 
-      {/* ── Account Info Card ─────────────────────────────── */}
+      {/* ── Profile card ──────────────────────────────────── */}
       <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-5">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center flex-shrink-0">
-            <User className="w-6 h-6 text-amber-400" />
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <span className="font-display font-bold text-amber-400 text-lg">
+              {profile?.email?.[0]?.toUpperCase() ?? '?'}
+            </span>
           </div>
-          <div className="min-w-0">
-            <div className="font-display font-bold text-white text-base truncate">{user?.email}</div>
+          <div className="flex-1 min-w-0">
+            <div className="font-display font-semibold text-white text-sm truncate">{profile?.email ?? user?.email}</div>
             <div className="text-xs text-gray-500 mt-0.5">Member since {joinDate}</div>
           </div>
-          <div className="ml-auto flex-shrink-0">
-            {isElite ? (
-              <span className="flex items-center gap-1.5 px-3 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded-full text-xs font-bold text-yellow-400">
-                <Crown className="w-3 h-3" /> Elite
-              </span>
-            ) : (
-              <span className="px-3 py-1 bg-gray-800 border border-gray-700 rounded-full text-xs text-gray-400">
-                Free
-              </span>
-            )}
-          </div>
+          <span className={`flex-shrink-0 text-[10px] font-data font-bold px-2.5 py-1 rounded-full border ${
+            isElite
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+              : 'bg-gray-500/10 border-gray-500/20 text-gray-400'
+          }`}>
+            {isElite ? 'Elite' : 'Free'}
+          </span>
         </div>
 
-        {/* Subscription info */}
-        <div className="bg-[#0A0B0D] border border-[#1E2128] rounded-xl p-4 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Plan</span>
-            <span className="text-white font-medium">{isElite ? 'Elite Trader — $97/mo' : 'Free Trader'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Signals</span>
-            <span className="text-white font-medium">{isElite ? 'All signals unlocked' : '1 daily pick'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Education</span>
-            <span className="text-white font-medium">{profile?.education_completion_pct ?? 0}% complete</span>
-          </div>
+        {/* Plan summary */}
+        <div className="mt-4 pt-4 border-t border-[#1E2128] grid grid-cols-3 gap-3">
+          {[
+            { label: 'Plan',      value: isElite ? 'Elite Trader' : 'Free Trader' },
+            { label: 'Signals',   value: isElite ? 'Unlimited'    : '1 daily pick' },
+            { label: 'Education', value: `${profile?.education_completion_pct ?? 0}% complete` },
+          ].map(({ label, value }) => (
+            <div key={label} className="text-center">
+              <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-1">{label}</div>
+              <div className="text-xs font-medium text-white">{value}</div>
+            </div>
+          ))}
         </div>
 
-        {/* Upgrade CTA for free users */}
+        {/* Upgrade CTA — free users only */}
         {!isElite && (
           <button
             onClick={() => navigate('/pricing')}
@@ -188,152 +106,153 @@ export function SettingsTab() {
       </div>
 
       {/* ── Change Password ───────────────────────────────── */}
-      <Section
-        icon={<Lock className="w-4 h-4" />}
-        title="Change Password"
-        subtitle="Update your account password"
-        open={pwSection}
-        onToggle={() => { setPwSection(o => !o); setPwMsg(null); }}
-      >
-        <div className="space-y-3">
-          {/* New Password */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider">New Password</label>
-            <div className="relative">
-              <input
-                type={showNewPw ? 'text' : 'password'}
-                value={newPw}
-                onChange={e => setNewPw(e.target.value)}
-                placeholder="Min. 8 characters"
-                className={inputClass}
-              />
-              <button type="button" onClick={() => setShowNewPw(o => !o)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
-                {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          {/* Confirm New Password — B3 FIX: showConfPw now correctly controls THIS field */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider">Confirm New Password</label>
-            <div className="relative">
-              <input
-                type={showConfPw ? 'text' : 'password'}
-                value={confPw}
-                onChange={e => setConfPw(e.target.value)}
-                placeholder="••••••••"
-                className={inputClass}
-              />
-              <button type="button" onClick={() => setShowConfPw(o => !o)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
-                {showConfPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          {pwMsg && <Msg msg={pwMsg} />}
-          <button
-            onClick={handleChangePassword}
-            disabled={pwLoading || !newPw || !confPw}
-            className={btnPrimary}
-          >
-            {pwLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-            Update Password
-          </button>
-        </div>
-      </Section>
-
-      {/* ── Change Email ──────────────────────────────────── */}
-      <Section
-        icon={<Mail className="w-4 h-4" />}
-        title="Change Email"
-        subtitle={`Current: ${user?.email}`}
-        open={emSection}
-        onToggle={() => { setEmSection(o => !o); setEmMsg(null); }}
-      >
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider">New Email Address</label>
-            <input
-              type="email"
-              value={newEmail}
-              onChange={e => setNewEmail(e.target.value)}
-              placeholder="you@example.com"
-              className={inputClass}
-            />
-          </div>
-          <p className="text-xs text-gray-600">A confirmation link will be sent to your new email. Your email won't change until you click it.</p>
-          {emMsg && <Msg msg={emMsg} />}
-          <button
-            onClick={handleChangeEmail}
-            disabled={emLoading || !newEmail}
-            className={btnPrimary}
-          >
-            {emLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-            Send Confirmation
-          </button>
-        </div>
-      </Section>
-
-      {/* ── Sign Out ──────────────────────────────────────── */}
       <div className="bg-[#111318] border border-[#1E2128] rounded-2xl overflow-hidden">
         <button
-          onClick={signOut}
-          className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/3 transition-all text-left"
+          onClick={() => { setPwSection(o => !o); setPwMsg(null); }}
+          className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/3 transition-colors text-left"
         >
-          <div className="p-2 rounded-xl bg-gray-800 flex-shrink-0">
-            <LogOut className="w-4 h-4 text-gray-400" />
+          <div className="w-9 h-9 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Lock className="w-4 h-4 text-blue-400" />
           </div>
           <div className="flex-1">
-            <div className="font-display font-semibold text-sm text-white">Sign Out</div>
-            <div className="text-xs text-gray-500 mt-0.5">End your session on this device</div>
+            <div className="font-display font-semibold text-white text-sm">Change Password</div>
+            <div className="text-xs text-gray-500">Update your account password</div>
           </div>
-          <ChevronRight className="w-4 h-4 text-gray-600" />
+          <span className="text-gray-600 text-lg">{pwSection ? '−' : '›'}</span>
         </button>
+
+        {pwSection && (
+          <div className="px-5 pb-5 border-t border-[#1E2128] space-y-3 pt-4">
+            {/* New password */}
+            <div>
+              <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">New Password</label>
+              <div className="relative">
+                <input
+                  type={showNewPw ? 'text' : 'password'}
+                  value={newPw}
+                  onChange={e => setNewPw(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  className="w-full bg-[#0A0B0D] border border-[#1E2128] rounded-xl px-4 pr-10 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-all"
+                />
+                <button type="button" onClick={() => setShowNewPw(o => !o)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
+                  {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm password */}
+            <div>
+              <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">Confirm New Password</label>
+              <div className="relative">
+                <input
+                  type={showConfPw ? 'text' : 'password'}
+                  value={confPw}
+                  onChange={e => setConfPw(e.target.value)}
+                  placeholder="Repeat new password"
+                  className="w-full bg-[#0A0B0D] border border-[#1E2128] rounded-xl px-4 pr-10 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-all"
+                />
+                <button type="button" onClick={() => setShowConfPw(o => !o)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
+                  {showConfPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {pwMsg && (
+              <div className={`flex items-center gap-2 p-3 rounded-xl border text-sm ${
+                pwMsg.ok
+                  ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                  : 'bg-red-500/10 border-red-500/20 text-red-400'
+              }`}>
+                {pwMsg.ok ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                {pwMsg.text}
+              </div>
+            )}
+
+            <button
+              onClick={handlePasswordChange}
+              disabled={pwLoading}
+              className="w-full py-2.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 font-display font-semibold text-sm rounded-xl transition-all"
+            >
+              {pwLoading ? 'Updating…' : 'Update Password'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── Delete Account ────────────────────────────────── */}
-      <Section
-        icon={<Trash2 className="w-4 h-4" />}
-        title="Delete Account"
-        subtitle="Permanently remove all your data"
-        open={delSection}
-        onToggle={() => { setDelSection(o => !o); setDelMsg(null); setDelConfirm(''); }}
-        danger
+      {/* ── Sign Out ──────────────────────────────────────── */}
+      <button
+        onClick={handleSignOut}
+        className="w-full bg-[#111318] border border-[#1E2128] rounded-2xl px-5 py-4 flex items-center gap-4 hover:bg-white/3 transition-colors text-left"
       >
-        <div className="space-y-3">
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 leading-relaxed">
-            <strong>This is permanent.</strong> Your account, all journal entries, analysis history, and education progress will be deleted immediately and cannot be recovered.
-            {/* A3 FIX: Stripe subscription is now cancelled automatically before deletion */}
-            {isElite && (
-              <span className="block mt-1">Your Elite subscription will be cancelled automatically when you delete your account.</span>
-            )}
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider">Type DELETE to confirm</label>
-            <input
-              type="text"
-              value={delConfirm}
-              onChange={e => setDelConfirm(e.target.value)}
-              placeholder="DELETE"
-              className="w-full bg-[#0A0B0D] border border-red-500/30 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/60 transition-all font-mono"
-            />
-          </div>
-          {delMsg && <Msg msg={delMsg} />}
-          <button
-            onClick={handleDeleteAccount}
-            disabled={delLoading || delConfirm !== 'DELETE'}
-            className={btnDanger + ' disabled:opacity-40'}
-          >
-            {delLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Delete My Account
-          </button>
+        <div className="w-9 h-9 bg-gray-500/10 border border-gray-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+          <LogOut className="w-4 h-4 text-gray-400" />
         </div>
-      </Section>
+        <div className="flex-1">
+          <div className="font-display font-semibold text-white text-sm">Sign Out</div>
+          <div className="text-xs text-gray-500">End your session on this device</div>
+        </div>
+        <span className="text-gray-600 text-lg">›</span>
+      </button>
 
-      {/* Footer */}
-      <p className="text-center text-gray-700 text-xs pb-4 font-data">
-        NXXT Futures · Private Terminal · v1.0
-      </p>
+      {/* ── Delete Account ────────────────────────────────── */}
+      <div className="bg-[#111318] border border-red-500/10 rounded-2xl overflow-hidden">
+        <button
+          onClick={() => { setDelSection(o => !o); setDelMsg(null); }}
+          className="w-full flex items-center gap-4 px-5 py-4 hover:bg-red-500/5 transition-colors text-left"
+        >
+          <div className="w-9 h-9 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Trash2 className="w-4 h-4 text-red-400" />
+          </div>
+          <div className="flex-1">
+            <div className="font-display font-semibold text-red-400 text-sm">Delete Account</div>
+            <div className="text-xs text-gray-500">Permanently remove all your data</div>
+          </div>
+          <span className="text-gray-600 text-lg">{delSection ? '−' : '›'}</span>
+        </button>
+
+        {delSection && (
+          <div className="px-5 pb-5 border-t border-red-500/10 space-y-3 pt-4">
+            <div className="p-3 bg-red-500/5 border border-red-500/15 rounded-xl text-xs text-red-300 leading-relaxed">
+              This is permanent and cannot be undone. Your subscription will be cancelled automatically and all data will be deleted.
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">
+                Type <span className="text-red-400 font-bold">DELETE</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={delConfirm}
+                onChange={e => setDelConfirm(e.target.value)}
+                placeholder="DELETE"
+                className="w-full bg-[#0A0B0D] border border-red-500/20 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/50 transition-all"
+              />
+            </div>
+
+            {delMsg && (
+              <div className={`flex items-center gap-2 p-3 rounded-xl border text-sm ${
+                delMsg.ok
+                  ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                  : 'bg-red-500/10 border-red-500/20 text-red-400'
+              }`}>
+                {delMsg.ok ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                {delMsg.text}
+              </div>
+            )}
+
+            <button
+              onClick={handleDeleteAccount}
+              disabled={delLoading || delConfirm !== 'DELETE'}
+              className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 border border-red-500/30 text-red-400 font-display font-semibold text-sm rounded-xl transition-all"
+            >
+              {delLoading ? 'Deleting…' : 'Permanently Delete Account'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <p className="text-center text-gray-700 text-xs pb-4">NXXT Futures · Private Terminal · v1.0</p>
     </div>
   );
 }
