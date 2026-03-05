@@ -83,7 +83,8 @@ interface Signal {
   confidence: number;
   status: string;
   setup_status: string;
-  entry_price: number;
+  entry_zone_min: number;
+  entry_zone_max: number;
   stop_loss: number;
   tp1: number;
   created_at: string;
@@ -237,7 +238,7 @@ export function AdminPage() {
   const loadSignals = async () => {
     const { data, error } = await supabase
       .from('futures_signals')
-      .select('id, symbol, direction, confidence, status, setup_status, entry_price, stop_loss, tp1, created_at, expires_at')
+      .select('id, symbol, direction, confidence, status, setup_status, entry_zone_min, entry_zone_max, stop_loss, tp1, created_at, expires_at')
       .order('created_at', { ascending: false })
       .limit(200);
 
@@ -758,7 +759,7 @@ export function AdminPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4 text-gray-300">{s.confidence}%</td>
-                            <td className="py-3 px-4 font-mono text-xs">{s.entry_price?.toFixed(2)}</td>
+                            <td className="py-3 px-4 font-mono text-xs">{s.entry_zone_min?.toFixed(2)}–{s.entry_zone_max?.toFixed(2)}</td>
                             <td className="py-3 px-4 font-mono text-xs text-red-400">{s.stop_loss?.toFixed(2)}</td>
                             <td className="py-3 px-4">{getStatusBadge(s.status)}</td>
                             <td className="py-3 px-4">
@@ -969,7 +970,7 @@ export function AdminPage() {
                     <button
                       onClick={() => downloadCSV(
                         ['Symbol', 'Direction', 'Confidence', 'Status', 'Setup', 'Entry', 'Stop', 'Created'],
-                        signals.map(s => [s.symbol, s.direction, s.confidence, s.status, s.setup_status, s.entry_price, s.stop_loss, new Date(s.created_at).toLocaleString()]),
+                        signals.map(s => [s.symbol, s.direction, s.confidence, s.status, s.setup_status, s.entry_zone_min, s.stop_loss, new Date(s.created_at).toLocaleString()]),
                         'nxxt-signals'
                       )}
                       className="flex items-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
