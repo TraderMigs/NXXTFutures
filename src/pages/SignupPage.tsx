@@ -1,5 +1,5 @@
-import { useState, useEffect} from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -14,15 +14,17 @@ export function SignupPage() {
   const [done, setDone]                 = useState(false);
   const { signUp, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  // E3 FIX: useEffect MUST come before any conditional return — Rules of Hooks.
-  // Previous version had this AFTER the if(user) check which caused React error #300.
+  // Read ?tier=elite from URL
+  const tierParam = searchParams.get('tier');
+  const isEliteIntent = tierParam === 'elite';
+
   useEffect(() => {
     document.title = 'Create Account — NXXT Futures';
     return () => { document.title = 'NXXT Futures'; };
   }, []);
 
-  // B2 FIX: Using <Navigate> component instead of navigate() in render body
   if (user) {
     return <Navigate to="/app" replace />;
   }
@@ -51,6 +53,14 @@ export function SignupPage() {
         }
         return;
       }
+
+      // If they came from the Elite upgrade path, store the intent.
+      // After email confirmation + login, LoginPage will redirect to /pricing
+      // which auto-launches the Stripe checkout.
+      if (isEliteIntent) {
+        localStorage.setItem('pendingEliteUpgrade', '1');
+      }
+
       setDone(true);
     } catch {
       setError('Something went wrong. Try again.');
@@ -58,7 +68,6 @@ export function SignupPage() {
       setLoading(false);
     }
   };
-
 
   return (
     <div className="min-h-screen bg-[#0A0B0D] flex items-center justify-center p-4">
@@ -87,7 +96,11 @@ export function SignupPage() {
               <div className="font-data text-[10px] text-amber-500/70 tracking-[0.2em] uppercase">Create Account</div>
             </div>
           </div>
-          <p className="text-gray-500 text-sm">Free forever. Upgrade to Elite anytime.</p>
+          {isEliteIntent ? (
+            <p className="text-amber-400 text-sm font-semibold">One step away from Elite Trader.</p>
+          ) : (
+            <p className="text-gray-500 text-sm">Free forever. Upgrade to Elite anytime.</p>
+          )}
         </div>
 
         {/* Success state */}
@@ -100,6 +113,11 @@ export function SignupPage() {
             <p className="text-gray-400 text-sm mb-6 leading-relaxed">
               We sent a confirmation link to <strong className="text-white">{email}</strong>. Click it to activate your account, then come back to sign in.
             </p>
+            {isEliteIntent && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <p className="text-amber-400 text-xs">After signing in, you'll be taken directly to Elite Trader checkout.</p>
+              </div>
+            )}
             <button
               onClick={() => navigate('/login')}
               className="w-full bg-amber-500 hover:bg-amber-400 text-black font-display font-bold py-3 rounded-xl transition-all text-sm"
@@ -110,6 +128,12 @@ export function SignupPage() {
         ) : (
           /* Sign-up card */
           <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-8">
+            {isEliteIntent && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
+                <p className="text-amber-400 text-xs font-semibold">🏆 Creating your Elite Trader account</p>
+                <p className="text-gray-500 text-xs mt-1">You'll complete payment after confirming your email.</p>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
 
               {/* Email */}
@@ -200,6 +224,8 @@ export function SignupPage() {
                     <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                     Creating account...
                   </>
+                ) : isEliteIntent ? (
+                  'Create Account & Continue to Elite'
                 ) : (
                   'Create Free Account'
                 )}
