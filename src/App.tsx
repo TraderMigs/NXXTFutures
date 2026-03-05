@@ -7,6 +7,7 @@ import { LandingPage } from './pages/LandingPage';
 import { PricingPage } from './pages/PricingPage';
 import { FuturesBasicsPage } from './pages/FuturesBasicsPage';
 import { PaymentSuccessPage } from './pages/PaymentSuccessPage';
+import { AuthConfirmPage } from './pages/AuthConfirmPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
             <Route path="/signup"          element={<SignupPage />} />
             <Route path="/futures-basics"  element={<FuturesBasicsPage />} />
             <Route path="/payment-success" element={<PaymentSuccessPage />} />
+            <Route path="/auth/confirm"    element={<AuthConfirmPage />} />
             <Route path="/login"           element={<LoginPage />} />
             <Route
               path="/app"

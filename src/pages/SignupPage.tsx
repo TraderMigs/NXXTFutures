@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Navigate, useSearchParams } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowLeft, CheckCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export function SignupPage() {
   const [email, setEmail]               = useState('');
@@ -11,6 +12,7 @@ export function SignupPage() {
   const [showConfirm, setShowConfirm]   = useState(false);
   const [error, setError]               = useState('');
   const [loading, setLoading]           = useState(false);
+  const [progressMessage, setProgressMessage] = useState('');
   const [done, setDone]                 = useState(false);
   const { signUp, user } = useAuth();
   const navigate = useNavigate();
@@ -31,6 +33,7 @@ export function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setProgressMessage('');
 
     if (password.length < 8) {
       setError('Password must be at least 8 characters.');
@@ -42,19 +45,49 @@ export function SignupPage() {
     }
 
     setLoading(true);
+
     try {
-      const { error } = await signUp(email, password);
-      if (error) {
-        if (error.message?.toLowerCase().includes('already registered')) {
+      setProgressMessage(isEliteIntent ? 'Creating your account...' : 'Creating account...');
+
+      const { error: signUpError } = await signUp(email, password);
+      if (signUpError) {
+        if (signUpError.message?.toLowerCase().includes('already registered')) {
           setError('An account with this email already exists. Try signing in.');
         } else {
-          setError(error.message || 'Sign up failed. Try again.');
+          setError(signUpError.message || 'Sign up failed. Try again.');
         }
         return;
       }
+
       if (isEliteIntent) {
-        localStorage.setItem('pendingEliteUpgrade', '1');
+        // Immediately fire Stripe checkout — no email gate
+        setProgressMessage('Connecting to Stripe...');
+
+        const { data, error: checkoutError } = await supabase.functions.invoke('create-signup-checkout', {
+          body: { email },
+        });
+
+        if (checkoutError) {
+          console.error('[SignupPage] Checkout error:', checkoutError);
+          setError('Account created! Failed to connect to payment. Please sign in and upgrade from the pricing page.');
+          setLoading(false);
+          setProgressMessage('');
+          return;
+        }
+
+        if (data?.url) {
+          setProgressMessage('Redirecting to secure payment...');
+          window.location.href = data.url;
+          return;
+        } else {
+          setError('Account created! Failed to create payment session. Please sign in and upgrade from the pricing page.');
+          setLoading(false);
+          setProgressMessage('');
+          return;
+        }
       }
+
+      // Free signup — show email confirmation screen
       setDone(true);
     } catch {
       setError('Something went wrong. Try again.');
@@ -94,6 +127,7 @@ export function SignupPage() {
           )}
         </div>
 
+        {/* Free signup success state */}
         {done ? (
           <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-8 text-center">
             <div className="inline-flex p-3 bg-green-500/20 rounded-full mb-4">
@@ -103,11 +137,6 @@ export function SignupPage() {
             <p className="text-gray-400 text-sm mb-6 leading-relaxed">
               We sent a confirmation link to <strong className="text-white">{email}</strong>. Click it to activate your account, then come back to sign in.
             </p>
-            {isEliteIntent && (
-              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                <p className="text-amber-400 text-xs">After signing in, you'll be taken directly to Elite Trader checkout.</p>
-              </div>
-            )}
             <button
               onClick={() => navigate('/login')}
               className="w-full bg-amber-500 hover:bg-amber-400 text-black font-display font-bold py-3 rounded-xl transition-all text-sm"
@@ -119,8 +148,8 @@ export function SignupPage() {
           <div className="bg-[#111318] border border-[#1E2128] rounded-2xl p-8">
             {isEliteIntent && (
               <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
-                <p className="text-amber-400 text-xs font-semibold">🏆 Creating your Elite Trader account</p>
-                <p className="text-gray-500 text-xs mt-1">You'll complete payment after confirming your email.</p>
+                <p className="text-amber-400 text-xs font-semibold">🏆 Elite Trader — $97/month</p>
+                <p className="text-gray-500 text-xs mt-1">Create account → Stripe checkout → Verify email → Enter app</p>
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -157,11 +186,8 @@ export function SignupPage() {
                     className="w-full bg-[#0A0B0D] border border-[#1E2128] rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
                     placeholder="Min. 8 characters"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors"
-                  >
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors">
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
@@ -181,11 +207,8 @@ export function SignupPage() {
                     className="w-full bg-[#0A0B0D] border border-[#1E2128] rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
                     placeholder="••••••••"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirm(!showConfirm)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors"
-                  >
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors">
                     {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
@@ -205,11 +228,11 @@ export function SignupPage() {
               >
                 {loading ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                    Creating account...
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {progressMessage || 'Creating account...'}
                   </>
                 ) : isEliteIntent ? (
-                  'Create Account & Continue to Elite'
+                  'Create Account & Continue to Payment'
                 ) : (
                   'Create Free Account'
                 )}

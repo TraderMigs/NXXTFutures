@@ -42,7 +42,7 @@ export function PricingPage() {
     if (!user) { navigate('/signup?tier=elite'); return; }
     if (isElite) { navigate('/app'); return; }
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError || !session) { setError('Session expired. Please log out and log back in.'); return; }
+    if (sessionError || !session) { setError('Session expired. Please sign out and sign back in.'); return; }
     setLoading(true); setError('');
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('create-signup-checkout', {
@@ -58,24 +58,24 @@ export function PricingPage() {
     }
   }, [user, isElite, promoApplied, promoCode, navigate]);
 
-  // Auto-launch Elite checkout if user arrived via the pendingEliteUpgrade flow
+  // Auto-fire checkout when arriving from AuthConfirmPage with ?checkout=elite
+  // This handles the case where user confirmed email but hadn't paid yet
   useEffect(() => {
-    if (user && !isElite) {
-      const pending = localStorage.getItem('pendingEliteUpgrade');
-      if (pending) {
-        localStorage.removeItem('pendingEliteUpgrade');
-        handleSubscribe();
-      }
+    const checkoutParam = searchParams.get('checkout');
+    if (checkoutParam === 'elite' && user && !isElite && !loading) {
+      handleSubscribe();
     }
-  }, [user, isElite, handleSubscribe]);
+  }, [user, isElite, searchParams, handleSubscribe, loading]);
 
   const handleGetStarted = () => {
     if (!user) { navigate('/signup?tier=free'); return; }
     navigate('/app');
   };
 
-  // E3 FIX: Per-page browser tab title for UX and SEO
-  useEffect(() => { document.title = 'Pricing — NXXT Futures'; return () => { document.title = 'NXXT Futures'; }; }, []);
+  useEffect(() => {
+    document.title = 'Pricing — NXXT Futures';
+    return () => { document.title = 'NXXT Futures'; };
+  }, []);
 
   return (
     <div className="min-h-screen bg-black text-white">
