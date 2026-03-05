@@ -1,4 +1,4 @@
-// v3 - deployed with --no-verify-jwt
+// v4 - Session-gated: London 3AM-7AM EST + NY 7AM-11AM EST only. 4h universal expiry.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import Anthropic from 'npm:@anthropic-ai/sdk@0.71.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
@@ -31,11 +31,61 @@ const YF_SYMBOL_MAP: Record<string, string> = {
   ZC: 'ZC=F', ZW: 'ZW=F', ZS: 'ZS=F',
 };
 
-// Symbols to scan — scan high-liquidity first
+// Symbols to scan — high-liquidity first
 const SCAN_SYMBOLS = ['ES', 'NQ', 'GC', 'CL', 'YM', 'RTY', 'SI', 'NG', 'HG', 'RB', 'ZC', 'ZW', 'ZS'];
 
-// Scan timeframe — 1H for intraday/swing setups
 const SCAN_TIMEFRAME = '1h';
+
+// ── SESSION GATE ───────────────────────────────────────────────────────────────
+// PERMANENT RULE: Scanner ONLY runs during these windows (EST = UTC-5 in winter, UTC-4 in summer)
+// London session: 3 AM – 7 AM EST  = 08:00 – 12:00 UTC
+// NY session:     7 AM – 11 AM EST = 12:00 – 16:00 UTC
+// Weekends (Saturday/Sunday UTC): always blocked
+//
+// NOTE: EST is UTC-5 (Nov–Mar) and EDT is UTC-4 (Mar–Nov).
+// To avoid DST drift, we use slightly wider UTC windows:
+//   London: 08:00–12:00 UTC covers 3AM–7AM EST in winter AND 4AM–8AM EDT in summer (close enough)
+//   NY:     12:00–16:00 UTC covers 7AM–11AM EST in winter AND 8AM–12PM EDT in summer (close enough)
+// This is intentional — a 1-hour drift in summer is acceptable and avoids dual cron complexity.
+function isWithinTradingSession(): { allowed: boolean; session: string; reason: string } {
+  const now = new Date();
+  const dayOfWeek = now.getUTCDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+  const hourUTC = now.getUTCHours();
+
+  // Block weekends entirely
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return {
+      allowed: false,
+      session: 'WEEKEND',
+      reason: `Weekend — markets closed. Next session: Monday London open (3 AM EST).`,
+    };
+  }
+
+  // London session: 08:00–12:00 UTC
+  if (hourUTC >= 8 && hourUTC < 12) {
+    return {
+      allowed: true,
+      session: 'LONDON',
+      reason: `London session active (${hourUTC}:00 UTC).`,
+    };
+  }
+
+  // NY session: 12:00–16:00 UTC
+  if (hourUTC >= 12 && hourUTC < 16) {
+    return {
+      allowed: true,
+      session: 'NY',
+      reason: `New York session active (${hourUTC}:00 UTC).`,
+    };
+  }
+
+  // All other hours — blocked
+  return {
+    allowed: false,
+    session: 'OFF_HOURS',
+    reason: `Outside trading windows. Current UTC hour: ${hourUTC}. London: 08-12 UTC, NY: 12-16 UTC, Mon-Fri only.`,
+  };
+}
 
 interface Candle {
   datetime: string;
@@ -93,7 +143,7 @@ function calculatePoints(entry: number, exit: number, direction: 'BUY' | 'SELL',
 async function fetchSymbolData(symbol: string): Promise<{
   currentPrice: number;
   candles1h: Candle[];
-  candles4h: Candle[];  // returned as 1h, AI groups into 4h
+  candles4h: Candle[];
   candles15m: Candle[];
   atr: number;
 } | null> {
@@ -118,15 +168,13 @@ async function fetchSymbolData(symbol: string): Promise<{
 
     return {
       currentPrice,
-      candles1h: candles1h.slice(-100),   // last 100 x 1h candles
-      candles4h: candles1h.slice(-200),   // last 200 x 1h = ~50 x 4h bars
-      candles15m: candles15m.slice(-80),  // last 80 x 15m candles
+      candles1h: candles1h.slice(-100),
+      candles4h: candles1h.slice(-200),
+      candles15m: candles15m.slice(-80),
       atr,
     };
   } catch (err) {
     console.error(`fetchSymbolData failed for ${symbol}:`, err);
-    // D2: Yahoo Finance errors are logged here — admin notification sent from main handler
-    // if total Yahoo failures exceed threshold (see results.yahoo_errors tracking below)
     return null;
   }
 }
@@ -259,30 +307,20 @@ Analyze for a valid SMC setup. Only return a signal if confidence >= 75% and a g
     const textBlock = message.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') return null;
 
-    // ── Robust JSON extraction ─────────────────────────────────────────────
     let rawText = textBlock.text.trim();
-    // Strip markdown code fences
     rawText = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
-    // Find the outermost JSON object
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 
     let jsonStr = jsonMatch[0];
-
-    // Remove control characters inside string values (newlines/tabs embedded in strings)
-    // Replace literal \n and \r inside JSON string values with a space
     jsonStr = jsonStr.replace(/([":,\[\{]\s*"[^"]*?)\n([^"]*?")/g, '$1 $2');
     jsonStr = jsonStr.replace(/([":,\[\{]\s*"[^"]*?)\r([^"]*?")/g, '$1 $2');
 
-    // If JSON is truncated (ends mid-stream), attempt to close it gracefully
-    // by detecting if parse fails and trimming to last valid comma position
     let result: any;
     try {
       result = JSON.parse(jsonStr);
     } catch (parseErr) {
-      // Attempt recovery: truncate at last complete key:value boundary
-      // Find last occurrence of a complete field (ends with }, ], or "value")
       const lastComma = jsonStr.lastIndexOf(',');
       if (lastComma > 100) {
         const truncated = jsonStr.slice(0, lastComma) + '\n}';
@@ -299,19 +337,16 @@ Analyze for a valid SMC setup. Only return a signal if confidence >= 75% and a g
       }
     }
 
-    // No setup found
     if (result.no_setup === true) {
       console.log(`${symbol}: No setup — ${result.reason}`);
       return null;
     }
 
-    // Below confidence threshold
     if (!result.confidence || result.confidence < 75) {
       console.log(`${symbol}: Confidence too low (${result.confidence})`);
       return null;
     }
 
-    // Attach symbol metadata
     result.symbol = symbol;
     result.currentPrice = currentPrice;
     return result;
@@ -327,11 +362,8 @@ async function saveSignal(signal: any, supabase: any): Promise<void> {
   const cfg = FUTURES_CONFIGS[signal.symbol];
   const entryMid = (signal.entry_zone_min + signal.entry_zone_max) / 2;
 
-  // B1 FIX: Duplicate signal guard — if an ACTIVE signal already exists for this
-  // symbol+direction with a similar entry zone (within 0.5% price tolerance),
-  // update its generated_at timestamp instead of inserting a duplicate.
-  // Without this, the hourly scanner could stack 8 identical ES BUY signals in a day.
-  const entryTolerance = entryMid * 0.005; // 0.5% tolerance
+  // Duplicate signal guard — prevent stacking identical signals
+  const entryTolerance = entryMid * 0.005;
   const { data: existing } = await supabase
     .from('futures_signals')
     .select('id, generated_at')
@@ -343,12 +375,11 @@ async function saveSignal(signal: any, supabase: any): Promise<void> {
     .limit(1);
 
   if (existing && existing.length > 0) {
-    // Refresh the existing signal's timestamp instead of creating a duplicate
     await supabase
       .from('futures_signals')
       .update({ generated_at: new Date().toISOString(), confidence: signal.confidence })
       .eq('id', existing[0].id);
-    console.log(`Duplicate guard: refreshed existing ${signal.symbol} ${signal.direction} signal (id: ${existing[0].id})`);
+    console.log(`Duplicate guard: refreshed existing ${signal.symbol} ${signal.direction} signal`);
     return;
   }
 
@@ -359,7 +390,8 @@ async function saveSignal(signal: any, supabase: any): Promise<void> {
   const sl_points = calculatePoints(entryMid, signal.stop_loss, slDir, signal.symbol);
 
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24h from now
+  // PERMANENT RULE: All signals expire after exactly 4 hours. No exceptions.
+  const expiresAt = new Date(now.getTime() + 4 * 60 * 60 * 1000);
 
   await supabase.from('futures_signals').insert({
     symbol: signal.symbol,
@@ -392,60 +424,28 @@ async function saveSignal(signal: any, supabase: any): Promise<void> {
     created_at: now.toISOString(),
   });
 
-  console.log(`Saved signal: ${signal.symbol} ${signal.direction} @ ${signal.entry_zone_min}-${signal.entry_zone_max} (${signal.confidence}%)`);
+  console.log(`Saved signal: ${signal.symbol} ${signal.direction} @ ${signal.entry_zone_min}-${signal.entry_zone_max} (${signal.confidence}%) — expires in 4h`);
 }
 
-// ── Smart expiry — multi-rule ──────────────────────────────────────────────────
+// ── Universal 4-hour expiry ────────────────────────────────────────────────────
+// PERMANENT RULE: Everything expires at 4 hours. Matches our session windows.
+// London signal at 3AM EST → gone by 7AM. NY signal at 7AM EST → gone by 11AM.
+// No stale signals bleed into off-hours. Board is always clean.
 async function expireOldSignals(supabase: any): Promise<void> {
   const now = new Date();
-  let totalExpired = 0;
-
-  // Rule 1: expires_at passed (original 24h rule)
-  const { error: e1, count: c1 } = await supabase
-    .from('futures_signals')
-    .update({ status: 'EXPIRED', status_updated_at: now.toISOString() })
-    .eq('status', 'ACTIVE')
-    .lt('expires_at', now.toISOString());
-  if (e1) console.error('Expiry rule 1 error:', e1);
-  else { totalExpired += (c1 || 0); }
-
-  // Rule 2: MISSED signals older than 1 hour → EXPIRED
-  // Entry was missed, no point keeping it around for more than 60 minutes
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
-  const { error: e2, count: c2 } = await supabase
-    .from('futures_signals')
-    .update({ status: 'EXPIRED', status_updated_at: now.toISOString() })
-    .eq('status', 'ACTIVE')
-    .eq('setup_status', 'MISSED')
-    .lt('generated_at', oneHourAgo);
-  if (e2) console.error('Expiry rule 2 (MISSED >1h) error:', e2);
-  else { totalExpired += (c2 || 0); }
-
-  // Rule 3: PENDING signals older than 8 hours → EXPIRED
-  // A setup waiting 8+ hours for a pullback is most likely invalidated by new structure
-  const eightHoursAgo = new Date(now.getTime() - 8 * 60 * 60 * 1000).toISOString();
-  const { error: e3, count: c3 } = await supabase
-    .from('futures_signals')
-    .update({ status: 'EXPIRED', status_updated_at: now.toISOString() })
-    .eq('status', 'ACTIVE')
-    .eq('setup_status', 'PENDING')
-    .lt('generated_at', eightHoursAgo);
-  if (e3) console.error('Expiry rule 3 (PENDING >8h) error:', e3);
-  else { totalExpired += (c3 || 0); }
-
-  // Rule 4: Low confidence (<78%) signals older than 4 hours → EXPIRED
-  // Marginal setups have a shorter shelf life
   const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString();
-  const { error: e4, count: c4 } = await supabase
+
+  const { error, count } = await supabase
     .from('futures_signals')
     .update({ status: 'EXPIRED', status_updated_at: now.toISOString() })
     .eq('status', 'ACTIVE')
-    .lt('confidence', 78)
     .lt('generated_at', fourHoursAgo);
-  if (e4) console.error('Expiry rule 4 (low-conf >4h) error:', e4);
-  else { totalExpired += (c4 || 0); }
 
-  console.log(`Old signals expired — total removed: ${totalExpired} (rules: 24h-limit, MISSED>1h, PENDING>8h, LowConf>4h)`);
+  if (error) {
+    console.error('Expiry error:', error);
+  } else {
+    console.log(`Expired ${count || 0} signals older than 4 hours.`);
+  }
 }
 
 // ── CORS headers ───────────────────────────────────────────────────────────────
@@ -460,7 +460,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders });
 
   const startTime = Date.now();
-  console.log(`Hot Picks Scanner started at ${new Date().toISOString()}`);
+  console.log(`Hot Picks Scanner triggered at ${new Date().toISOString()}`);
 
   try {
     const supabaseAdmin = createClient(
@@ -470,16 +470,40 @@ Deno.serve(async (req: Request) => {
 
     const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') ?? '' });
 
+    // ── SESSION GATE — check before doing anything ─────────────────────────
+    const sessionCheck = isWithinTradingSession();
+    console.log(`Session check: ${sessionCheck.session} — ${sessionCheck.reason}`);
+
+    if (!sessionCheck.allowed) {
+      // Still run expiry even outside session hours — keeps the board clean
+      await expireOldSignals(supabaseAdmin);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          session_blocked: true,
+          session: sessionCheck.session,
+          reason: sessionCheck.reason,
+          message: 'Scanner outside trading hours. Expiry cleanup ran. No new signals generated.',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ── Within session — proceed with full scan ────────────────────────────
+    console.log(`✅ Scanning during ${sessionCheck.session} session.`);
+
     // Step 1: Expire old signals
     await expireOldSignals(supabaseAdmin);
 
-    // Step 2: Scan each symbol sequentially (avoid rate limits)
+    // Step 2: Scan each symbol sequentially
     const results = {
       scanned: 0,
       signals_found: 0,
       signals_saved: 0,
       errors: 0,
-      yahoo_errors: 0, // D2: tracks Yahoo Finance fetch failures specifically
+      yahoo_errors: 0,
+      session: sessionCheck.session,
       symbols_with_signals: [] as string[],
     };
 
@@ -497,7 +521,6 @@ Deno.serve(async (req: Request) => {
           results.symbols_with_signals.push(`${symbol} ${signal.direction} ${signal.confidence}%`);
         }
 
-        // Small delay between symbols to be respectful to Yahoo Finance
         await new Promise(resolve => setTimeout(resolve, 1500));
 
       } catch (err) {
@@ -512,19 +535,16 @@ Deno.serve(async (req: Request) => {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`Scan complete in ${elapsed}s:`, results);
 
-    // D2 FIX: If Yahoo Finance failed for majority of symbols, insert an admin notification
-    // so the admin dashboard surfaces the outage instead of silently generating no signals.
     if (results.yahoo_errors >= 5) {
       try {
         await supabaseAdmin.from('admin_notifications').insert({
           type: 'SYSTEM_ERROR',
           title: 'Yahoo Finance API Degraded',
-          message: `Hot Picks Scanner: ${results.yahoo_errors}/${results.scanned} symbols failed with Yahoo Finance errors. Signals may be missing. Check Yahoo Finance availability or consider switching to an alternative data provider.`,
+          message: `Hot Picks Scanner: ${results.yahoo_errors}/${results.scanned} symbols failed with Yahoo Finance errors. Signals may be missing.`,
           severity: 'HIGH',
           created_at: new Date().toISOString(),
           read: false,
         });
-        console.log('Admin notification sent: Yahoo Finance degraded');
       } catch (notifErr) {
         console.error('Failed to insert admin notification:', notifErr);
       }
