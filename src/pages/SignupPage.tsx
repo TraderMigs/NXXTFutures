@@ -1,6 +1,7 @@
+// src/pages/SignupPage.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate, Navigate, useSearchParams } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowLeft, CheckCircle, Loader2, Share2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -20,6 +21,16 @@ export function SignupPage() {
 
   const tierParam = searchParams.get('tier');
   const isEliteIntent = tierParam === 'elite';
+
+  // ── Capture referral code from ?ref= and persist to localStorage ──
+  useEffect(() => {
+    const refCode = searchParams.get('ref');
+    if (refCode && refCode.trim()) {
+      localStorage.setItem('nxxt_ref', refCode.trim().toUpperCase());
+    }
+  }, [searchParams]);
+
+  const referrerBadge = searchParams.get('ref')?.toUpperCase() ?? null;
 
   useEffect(() => {
     document.title = 'Create Account — NXXT Futures';
@@ -49,7 +60,10 @@ export function SignupPage() {
     try {
       setProgressMessage(isEliteIntent ? 'Creating your account...' : 'Creating account...');
 
-      const { error: signUpError } = await signUp(email, password);
+      // Read stored referral code right before signup
+      const storedRef = localStorage.getItem('nxxt_ref') ?? undefined;
+
+      const { error: signUpError } = await signUp(email, password, storedRef);
       if (signUpError) {
         if (signUpError.message?.toLowerCase().includes('already registered')) {
           setError('An account with this email already exists. Try signing in.');
@@ -58,6 +72,9 @@ export function SignupPage() {
         }
         return;
       }
+
+      // Clear stored ref after successful signup
+      localStorage.removeItem('nxxt_ref');
 
       if (isEliteIntent) {
         // Immediately fire Stripe checkout — no email gate
@@ -126,6 +143,17 @@ export function SignupPage() {
             <p className="text-gray-500 text-sm">Free forever. Upgrade to Elite anytime.</p>
           )}
         </div>
+
+        {/* Referral badge — shown when arriving via a referral link */}
+        {referrerBadge && !done && (
+          <div className="mb-4 flex items-center gap-2.5 px-4 py-3 bg-green-500/10 border border-green-500/20 rounded-xl">
+            <Share2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+            <div>
+              <p className="text-green-400 text-xs font-semibold">You were referred by a friend!</p>
+              <p className="text-gray-500 text-xs mt-0.5">Code: <span className="font-mono text-green-300">{referrerBadge}</span></p>
+            </div>
+          </div>
+        )}
 
         {/* Free signup success state */}
         {done ? (
