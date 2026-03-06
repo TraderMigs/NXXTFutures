@@ -70,9 +70,7 @@ interface Commission {
   id: string; created_at: string; referrer_id: string; referrer_email?: string;
   referred_id: string | null; referral_id: string | null;
   amount_cents: number; billing_month: string;
-  status: 'pending' | 'paid' | 'cancelled' | 'forfeited'; paid_at: string | null;
-  due_date: string | null; forfeiture_date: string | null;
-  referrer_payout?: string; // primary payout method for display
+  status: 'pending' | 'paid' | 'cancelled'; paid_at: string | null;
 }
 interface StripeRevenue {
   mrr: number; arr: number; activeCount: number; pastDueCount: number;
@@ -254,28 +252,16 @@ export function AdminPage({ onBack }: AdminPageProps) {
 
       const { data: comms } = await supabase
         .from('referral_commissions')
-        .select('id, created_at, referrer_id, referred_id, referral_id, amount_cents, billing_month, status, paid_at, due_date, forfeiture_date')
+        .select('id, created_at, referrer_id, referred_id, referral_id, amount_cents, billing_month, status, paid_at')
         .order('created_at', { ascending: false });
 
-      // Fetch payout methods from profiles
-      const { data: allProfiles } = await supabase
-        .from('profiles')
-        .select('id, email, payout_methods');
-
-      // Build maps
+      // Enrich with referrer emails using loaded users
       const userMap: Record<string, string> = {};
-      const payoutMap: Record<string, string> = {};
-      (allProfiles || []).forEach(p => {
-        userMap[p.id] = p.email;
-        if (p.payout_methods && Array.isArray(p.payout_methods) && p.payout_methods.length > 0) {
-          const primary = p.payout_methods.find((m: any) => m.primary) ?? p.payout_methods[0];
-          payoutMap[p.id] = `${primary.type}: ${primary.details}`;
-        }
-      });
+      users.forEach(u => { userMap[u.id] = u.email; });
 
       setReferrals((refs || []).map(r => ({ ...r, referrer_email: userMap[r.referrer_id] })));
-      setCommissions((comms || []).map(c => ({ ...c, referrer_email: userMap[c.referrer_id], referrer_payout: payoutMap[c.referrer_id] })));
-    } catch { console.log('Referral tables not ready — run Phase 4+5 SQL'); }
+      setCommissions((comms || []).map(c => ({ ...c, referrer_email: userMap[c.referrer_id] })));
+    } catch { console.log('Referral tables not ready — run Phase 4 SQL'); }
   };
 
   // ─── Promo CRUD ───────────────────────────────────────────
@@ -327,7 +313,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
     }
   };
 
-  const handleUpdateCommissionStatus = async (id: string, newStatus: 'pending' | 'paid' | 'cancelled' | 'forfeited') => {
+  const handleUpdateCommissionStatus = async (id: string, newStatus: 'pending' | 'paid' | 'cancelled') => {
     setUpdatingCommId(id);
     const patch: any = { status: newStatus };
     if (newStatus === 'paid') patch.paid_at = new Date().toISOString();
@@ -356,10 +342,8 @@ export function AdminPage({ onBack }: AdminPageProps) {
   const filteredTickets = tickets.filter(t => ticketFilter === 'all' || t.status === ticketFilter);
   const filteredCommissions = commissions.filter(c => commissionFilter === 'all' || c.status === commissionFilter);
 
-  const totalPendingComm  = commissions.filter(c => c.status === 'pending').reduce((s, c) => s + c.amount_cents, 0);
-  const totalPaidComm     = commissions.filter(c => c.status === 'paid').reduce((s, c) => s + c.amount_cents, 0);
-  const totalForfeitedComm = commissions.filter(c => c.status === 'forfeited').reduce((s, c) => s + c.amount_cents, 0);
-  const overdueCommissions = commissions.filter(c => c.status === 'pending' && c.due_date && new Date(c.due_date) < new Date());
+  const totalPendingComm = commissions.filter(c => c.status === 'pending').reduce((s, c) => s + c.amount_cents, 0);
+  const totalPaidComm    = commissions.filter(c => c.status === 'paid').reduce((s, c) => s + c.amount_cents, 0);
   const now        = new Date();
   const fmtDollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
@@ -428,7 +412,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
         {error && <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>}
 
         {/* Tabs */}
-        <div className="mb-6 border-b border-gray-800 overflow-x-auto">
+        <div className="mb-6 border-b border-gray-800 overflow-x-auto pt-2">
           <div className="flex gap-1 min-w-max">
             {tabs.map(tab => {
               const Icon = tab.icon;
@@ -665,32 +649,12 @@ export function AdminPage({ onBack }: AdminPageProps) {
               {/* Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: 'Total Sign-ups',  value: referrals.length,                                      color: 'text-white'     },
-                  { label: 'Converted Elite', value: referrals.filter(r => r.status === 'converted').length, color: 'text-green-400' },
-                  { label: 'Pending Payout',  value: fmtDollars(totalPendingComm),                           color: 'text-amber-400' },
-                  { label: 'Total Paid Out',  value: fmtDollars(totalPaidComm),                              color: 'text-cyan-400'  },
+                  { label: 'Total Sign-ups',  value: referrals.length,                                            color: 'text-white'     },
+                  { label: 'Converted Elite', value: referrals.filter(r => r.status === 'converted').length,       color: 'text-green-400' },
+                  { label: 'Pending Payout',  value: fmtDollars(totalPendingComm),                                 color: 'text-amber-400' },
+                  { label: 'Total Paid Out',  value: fmtDollars(totalPaidComm),                                    color: 'text-cyan-400'  },
                 ].map(card => <div key={card.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center"><div className={`text-2xl font-bold mb-1 ${card.color}`}>{card.value}</div><div className="text-xs text-gray-500">{card.label}</div></div>)}
               </div>
-
-              {/* Overdue alert */}
-              {overdueCommissions.length > 0 && (
-                <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-red-400">{overdueCommissions.length} commission{overdueCommissions.length > 1 ? 's' : ''} OVERDUE for payout</p>
-                    <p className="text-xs text-gray-400 mt-0.5">These are past their 30-day payout window. Pay out or mark as cancelled. They auto-forfeit at 120 days from creation.</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Forfeited total if any */}
-              {totalForfeitedComm > 0 && (
-                <div className="flex items-center gap-3 p-3 bg-gray-800/50 border border-gray-700 rounded-xl text-xs text-gray-500">
-                  <span className="font-medium text-gray-400">Forfeited commissions:</span>
-                  <span className="text-gray-400 font-bold">{fmtDollars(totalForfeitedComm)}</span>
-                  <span>— permanently expired, no action needed.</span>
-                </div>
-              )}
 
               {/* Referrals table */}
               <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -699,7 +663,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
                   <button onClick={() => downloadCSV(['Date','Referrer','Referred Email','Status','Converted At'], referrals.map(r => [new Date(r.created_at).toLocaleDateString(), showEmail(r.referrer_email), showEmail(r.referred_email), r.status, r.converted_at ? new Date(r.converted_at).toLocaleDateString() : '—']), 'nxxt-referrals')} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 border border-gray-700"><Download className="w-4 h-4" /> CSV</button>
                 </div>
                 {referrals.length === 0 ? (
-                  <div className="p-12 text-center text-gray-500"><Share2 className="w-10 h-10 mx-auto mb-3 opacity-30" /><p className="text-sm">No referrals yet.</p></div>
+                  <div className="p-12 text-center text-gray-500"><Share2 className="w-10 h-10 mx-auto mb-3 opacity-30" /><p className="text-sm">No referrals yet. They appear when users sign up via a referral link.</p></div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -730,81 +694,32 @@ export function AdminPage({ onBack }: AdminPageProps) {
                       <option value="pending">Pending</option>
                       <option value="paid">Paid</option>
                       <option value="cancelled">Cancelled</option>
-                      <option value="forfeited">Forfeited</option>
                     </select>
                   </div>
-                  <button onClick={() => downloadCSV(
-                    ['Date','Referrer','Payout Method','Month','Amount','Status','Due Date','Forfeiture Date','Paid At'],
-                    filteredCommissions.map(c => [
-                      new Date(c.created_at).toLocaleDateString(),
-                      showEmail(c.referrer_email),
-                      c.referrer_payout || '—',
-                      c.billing_month,
-                      fmtDollars(c.amount_cents),
-                      c.status,
-                      c.due_date ? new Date(c.due_date).toLocaleDateString() : '—',
-                      c.forfeiture_date ? new Date(c.forfeiture_date).toLocaleDateString() : '—',
-                      c.paid_at ? new Date(c.paid_at).toLocaleDateString() : '—',
-                    ]),
-                    'nxxt-commissions'
-                  )} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 border border-gray-700"><Download className="w-4 h-4" /> CSV</button>
+                  <button onClick={() => downloadCSV(['Date','Referrer','Month','Amount','Status','Paid At'], filteredCommissions.map(c => [new Date(c.created_at).toLocaleDateString(), showEmail(c.referrer_email), c.billing_month, fmtDollars(c.amount_cents), c.status, c.paid_at ? new Date(c.paid_at).toLocaleDateString() : '—']), 'nxxt-commissions')} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 border border-gray-700"><Download className="w-4 h-4" /> CSV</button>
                 </div>
                 {filteredCommissions.length === 0 ? (
-                  <div className="p-12 text-center text-gray-500"><DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" /><p className="text-sm">No commissions yet.</p></div>
+                  <div className="p-12 text-center text-gray-500"><DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" /><p className="text-sm">No commissions yet. They're created automatically when referred users pay monthly.</p></div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-800 text-left">
-                          {['Date','Referrer','Payout To','Month','Amount','Due Date','Status','Actions'].map(h => (
-                            <th key={h} className={`py-3 px-4 text-gray-500 text-xs font-medium ${h === 'Actions' ? 'text-right' : ''}`}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
+                      <thead><tr className="border-b border-gray-800 text-left">{['Date','Referrer','Month','Amount','Status','Actions'].map(h => <th key={h} className={`py-3 px-4 text-gray-500 text-xs font-medium ${h === 'Actions' ? 'text-right' : ''}`}>{h}</th>)}</tr></thead>
                       <tbody>
-                        {filteredCommissions.map(c => {
-                          const isOverdue = c.status === 'pending' && c.due_date && new Date(c.due_date) < new Date();
-                          const daysToForfeit = c.forfeiture_date ? Math.max(0, Math.ceil((new Date(c.forfeiture_date).getTime() - Date.now()) / 86400000)) : null;
-                          const forfeitSoon = c.status === 'pending' && daysToForfeit !== null && daysToForfeit <= 14;
-                          return (
-                            <tr key={c.id} className={`border-b border-gray-800/50 hover:bg-white/5 ${isOverdue ? 'bg-red-500/5' : forfeitSoon ? 'bg-amber-500/5' : ''}`}>
-                              <td className="py-3 px-4 text-gray-500 text-xs">{new Date(c.created_at).toLocaleDateString()}</td>
-                              <td className="py-3 px-4 text-sm">{showEmail(c.referrer_email)}</td>
-                              <td className="py-3 px-4 text-xs text-gray-400 max-w-[130px] truncate" title={c.referrer_payout || '—'}>
-                                {c.referrer_payout
-                                  ? <span className="font-mono">{demoMode ? '••••••••' : c.referrer_payout}</span>
-                                  : <span className="text-red-400 font-medium">⚠ Not set</span>}
-                              </td>
-                              <td className="py-3 px-4 font-mono text-xs text-gray-300">{c.billing_month}</td>
-                              <td className="py-3 px-4 font-bold text-green-400">{fmtDollars(c.amount_cents)}</td>
-                              <td className="py-3 px-4 text-xs">
-                                {c.due_date ? (
-                                  <div>
-                                    <span className={isOverdue ? 'text-red-400 font-medium' : 'text-gray-400'}>{new Date(c.due_date).toLocaleDateString()}</span>
-                                    {isOverdue && <div className="text-[10px] text-red-500">OVERDUE</div>}
-                                    {forfeitSoon && !isOverdue && <div className="text-[10px] text-amber-500">Forfeits in {daysToForfeit}d</div>}
-                                  </div>
-                                ) : '—'}
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                  c.status === 'paid' ? 'bg-green-500/20 text-green-400' :
-                                  c.status === 'forfeited' ? 'bg-gray-700 text-gray-500' :
-                                  c.status === 'cancelled' ? 'bg-gray-500/20 text-gray-500' :
-                                  isOverdue ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
-                                }`}>
-                                  {c.status === 'paid' ? 'Paid ✓' : c.status === 'forfeited' ? 'Forfeited' : c.status === 'cancelled' ? 'Cancelled' : isOverdue ? 'Overdue' : 'Pending'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <div className="flex justify-end gap-1">
-                                  {c.status === 'pending' && <button onClick={() => handleUpdateCommissionStatus(c.id, 'paid')} disabled={updatingCommId === c.id} className="px-2.5 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded text-xs disabled:opacity-40">{updatingCommId === c.id ? '…' : 'Mark Paid'}</button>}
-                                  {c.status === 'pending' && <button onClick={() => handleUpdateCommissionStatus(c.id, 'cancelled')} disabled={updatingCommId === c.id} className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded text-xs disabled:opacity-40">Cancel</button>}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {filteredCommissions.map(c => (
+                          <tr key={c.id} className="border-b border-gray-800/50 hover:bg-white/5">
+                            <td className="py-3 px-4 text-gray-500 text-xs">{new Date(c.created_at).toLocaleDateString()}</td>
+                            <td className="py-3 px-4 text-sm">{showEmail(c.referrer_email)}</td>
+                            <td className="py-3 px-4 font-mono text-xs text-gray-300">{c.billing_month}</td>
+                            <td className="py-3 px-4 font-bold text-green-400">{fmtDollars(c.amount_cents)}</td>
+                            <td className="py-3 px-4"><span className={`px-2 py-0.5 rounded text-xs font-medium ${c.status === 'paid' ? 'bg-green-500/20 text-green-400' : c.status === 'cancelled' ? 'bg-gray-500/20 text-gray-500' : 'bg-amber-500/20 text-amber-400'}`}>{c.status === 'paid' ? 'Paid ✓' : c.status === 'cancelled' ? 'Cancelled' : 'Pending'}</span></td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex justify-end gap-1">
+                                {c.status === 'pending' && <button onClick={() => handleUpdateCommissionStatus(c.id, 'paid')} disabled={updatingCommId === c.id} className="px-2.5 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded text-xs disabled:opacity-40">{updatingCommId === c.id ? '…' : 'Mark Paid'}</button>}
+                                {c.status === 'pending' && <button onClick={() => handleUpdateCommissionStatus(c.id, 'cancelled')} disabled={updatingCommId === c.id} className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded text-xs disabled:opacity-40">Cancel</button>}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
@@ -815,13 +730,11 @@ export function AdminPage({ onBack }: AdminPageProps) {
                 <AlertCircle className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-cyan-400 font-semibold mb-1">Commissions are manual</p>
-                  <p className="text-gray-400 text-xs">$25 commissions are auto-created each billing month when a referred user pays. Pay out 30 days after creation using the "Payout To" column. Mark as "Paid" here after sending. Commissions auto-forfeit at 120 days — daily digest emails remind you of due dates.</p>
+                  <p className="text-gray-400 text-xs">$25 commissions are auto-created each billing month when a referred user pays. You mark them as "Paid" here after you've sent payment to the referrer via PayPal, Wise, or crypto. Use the CSV export to track all payouts.</p>
                 </div>
               </div>
             </div>
           )}
-
-
 
           {/* ── REVENUE ── */}
           {activeTab === 'revenue' && (() => {
