@@ -71,20 +71,27 @@ export function PaymentSuccessPage() {
   }, []);
 
   useEffect(() => {
-    if (!sessionId) return;
-
-    // NEW SIGNUP FLOW: No authenticated user session yet.
-    // Payment went through Stripe. User needs to verify email then sign in.
-    // Show success immediately — no polling needed.
-    if (!userRef.current) {
+    // CASE 1: No session_id AND no user — arrived at page directly with nothing to do
+    if (!sessionId && !userRef.current) {
       setStatus('verified');
       return;
     }
 
-    // EXISTING USER UPGRADE FLOW: Poll for webhook to flip tier to elite.
-    const cleanup = startPolling();
-    return () => { if (cleanup) cleanup(); };
-  }, [sessionId, startPolling]);
+    // CASE 2: Has session_id but no user — brand new signup just paid, email not verified yet
+    // Show success immediately with "verify your email" notice
+    if (sessionId && !userRef.current) {
+      setStatus('verified');
+      return;
+    }
+
+    // CASE 3: User is logged in (either came from AuthConfirmPage redirect OR existing upgrade)
+    // Start polling regardless of whether session_id is present
+    // AuthConfirmPage redirects here WITHOUT session_id after email confirmation
+    if (userRef.current) {
+      const cleanup = startPolling();
+      return () => { if (cleanup) cleanup(); };
+    }
+  }, [sessionId, startPolling, user]);
 
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
@@ -115,7 +122,6 @@ export function PaymentSuccessPage() {
             <h1 className="text-3xl font-bold mb-3">Payment Successful!</h1>
             <p className="text-gray-400 mb-8">Your Elite Trader subscription has been activated.</p>
 
-            {/* New signup flow — no session yet, needs email verification */}
             {!user && (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 mb-6 text-left">
                 <div className="flex items-start gap-3">
@@ -130,7 +136,6 @@ export function PaymentSuccessPage() {
               </div>
             )}
 
-            {/* What's unlocked */}
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6 text-left">
               <div className="font-semibold text-yellow-400 mb-2 flex items-center gap-2">
                 <Zap className="w-4 h-4" />What's unlocked
