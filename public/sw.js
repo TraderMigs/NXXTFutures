@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nxxt-futures-v2';
+const CACHE_NAME = 'nxxt-futures-v3';
 
 // Only cache the bare minimum static shell.
 // DO NOT cache '/app' — it's a protected route that redirects unauthenticated
@@ -10,12 +10,17 @@ const STATIC_ASSETS = [
   '/manifest.json',
 ];
 
+// Listen for SKIP_WAITING message from UpdateToast — activates new SW immediately
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 // Install — cache static shell only
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
   );
-  self.skipWaiting();
+  // Do NOT skipWaiting here — let UpdateToast control activation timing
 });
 
 // Activate — clear old caches (including v1 which had the broken /app entry)
