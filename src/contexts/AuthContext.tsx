@@ -16,6 +16,7 @@ interface Profile {
   education_badge_earned: boolean;
   education_badge_earned_at: string | null;
   education_completion_pct: number;
+  referral_code: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,7 +28,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, referralCode?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
@@ -98,7 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string) => {
+  // ── signUp — now accepts optional referralCode ─────────────
+  const signUp = async (email: string, password: string, referralCode?: string) => {
     try {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (!error && data.user) {
@@ -111,6 +113,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           bypass_stripe: false,
         }, { onConflict: 'id' });
 
+        // ── Referral tracking ─────────────────────────────────
+        // If a valid referral code was passed, find the referrer and create a referral record
+        if (referralCode) {
+          try {
+            const { data: referrerData } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('referral_code', referralCode.toUpperCase())
+              .single();
+
+            if (referrerData?.id && referrerData.id !== data.user.id) {
+              await supabase.from('referrals').insert({
+                referrer_id:    referrerData.id,
+                referred_email: email,
+                referred_id:    data.user.id,
+                status:         'pending',
+              });
+              console.info(`[Auth] Referral recorded: ${referralCode} → ${email}`);
+            }
+          } catch (refErr) {
+            // Non-critical — never block signup over a referral error
+            console.warn('[Auth] Referral record failed (non-fatal):', refErr);
+          }
+        }
+
+        // ── Welcome email ─────────────────────────────────────
         try {
           await supabase.functions.invoke('send-email', {
             body: { type: 'welcome', email: email },
