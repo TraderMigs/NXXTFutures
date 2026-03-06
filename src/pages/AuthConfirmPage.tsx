@@ -13,40 +13,28 @@ export function AuthConfirmPage() {
   useEffect(() => {
     const handleConfirmation = async () => {
       try {
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken  = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-        const type         = hashParams.get('type');
+        // Read token_hash and type from URL query params (?token_hash=...&type=signup)
+        const searchParams = new URLSearchParams(window.location.search);
+        const tokenHash = searchParams.get('token_hash');
+        const type      = searchParams.get('type');
 
-        if (type === 'signup' && accessToken && refreshToken) {
+        if (tokenHash && type === 'signup') {
 
-          // Step 1: Set session
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
+          // Step 1: Verify the OTP token — this creates a real session
+          const { data, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: 'signup',
           });
 
-          if (sessionError) {
+          if (verifyError || !data.session) {
             setStatus('error');
-            setMessage('Confirmation link is expired or invalid. Please request a new one.');
+            setMessage('Confirmation link is expired or already used. Please sign in or request a new link.');
             return;
           }
 
-          // Step 2: Poll until user is available (max 5 seconds)
-          let confirmedUser = null;
-          for (let i = 0; i < 10; i++) {
-            await new Promise(r => setTimeout(r, 500));
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) { confirmedUser = user; break; }
-          }
+          const confirmedUser = data.session.user;
 
-          if (!confirmedUser) {
-            setStatus('error');
-            setMessage('Session sync failed. Please try signing in manually.');
-            return;
-          }
-
-          // Step 3: Read profile to determine routing
+          // Step 2: Read profile to determine routing
           const { data: profile } = await supabase
             .from('profiles')
             .select('subscription_tier, pending_tier, stripe_customer_id')
@@ -62,7 +50,7 @@ export function AuthConfirmPage() {
           }
 
           // PRIORITY 2: Pending Elite + already paid (stripe_customer_id exists)
-          // Payment went through, webhook may still be processing — go to payment-success to poll
+          // Payment went through, webhook may still be processing
           if (profile?.pending_tier === 'elite' && profile?.stripe_customer_id) {
             setStatus('success');
             setMessage('Email confirmed! Your Elite subscription is being activated...');
@@ -84,10 +72,9 @@ export function AuthConfirmPage() {
           startCountdown(() => navigate('/app'));
 
         } else {
-          // Already signed in or direct navigation
-          setStatus('success');
-          setMessage('Already confirmed. Taking you to the app...');
-          startCountdown(() => navigate('/app'));
+          // No token_hash in URL — user navigated here directly or link is malformed
+          setStatus('error');
+          setMessage('Invalid confirmation link. Please use the link from your email.');
         }
 
       } catch (err) {
