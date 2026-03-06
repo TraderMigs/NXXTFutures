@@ -12,6 +12,7 @@ import { AuthConfirmPage } from './pages/AuthConfirmPage';
 import { TermsPage } from './pages/TermsPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { SupportWidget } from './components/SupportWidget';
+import { UpdateToast } from './components/UpdateToast';
 
 export default function App() {
   return (
@@ -39,6 +40,8 @@ export default function App() {
           </Routes>
           {/* Support widget — visible on ALL pages, logged in or out */}
           <SupportWidget />
+          {/* Update toast — notifies users when a new version is deployed */}
+          <UpdateToast />
         </div>
       </BrowserRouter>
     </AuthProvider>
