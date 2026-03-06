@@ -72,6 +72,14 @@ interface Commission {
   amount_cents: number; billing_month: string;
   status: 'pending' | 'paid' | 'cancelled'; paid_at: string | null;
 }
+interface StripeRevenue {
+  mrr: number; arr: number; activeCount: number; pastDueCount: number;
+  newThisMonth: number; canceledThisMonth: number; churnRate: number;
+  sixMonthTotalDollars: number;
+  monthlyRevenue: { month: string; label: string; amountCents: number; amountDollars: number }[];
+  recentInvoices: { id: string; email: string; amount: number; date: string; status: string }[];
+  generatedAt: string;
+}
 
 type TabType = 'dashboard' | 'users' | 'education' | 'signals' | 'promos' | 'referrals' | 'revenue' | 'notifications' | 'support' | 'system';
 const VALID_TABS: TabType[] = ['dashboard','users','education','signals','promos','referrals','revenue','notifications','support','system'];
@@ -148,6 +156,11 @@ export function AdminPage({ onBack }: AdminPageProps) {
   const [openTicketCount,  setOpenTicketCount]  = useState(0);
   const [commissionFilter, setCommissionFilter] = useState<string>('all');
   const [updatingCommId,   setUpdatingCommId]   = useState<string | null>(null);
+
+  // Stripe Revenue (Phase 5)
+  const [stripeRevenue,   setStripeRevenue]   = useState<StripeRevenue | null>(null);
+  const [stripeLoading,   setStripeLoading]   = useState(false);
+  const [stripeError,     setStripeError]     = useState('');
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -282,6 +295,24 @@ export function AdminPage({ onBack }: AdminPageProps) {
   };
 
   // ─── Commission actions ───────────────────────────────────
+  // ─── Stripe Revenue Loader ────────────────────────────────
+  const loadStripeRevenue = async () => {
+    setStripeLoading(true);
+    setStripeError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const resp = await supabase.functions.invoke('stripe-revenue', {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
+      if (resp.error) throw new Error(resp.error.message || 'Edge function error');
+      setStripeRevenue(resp.data);
+    } catch (err) {
+      setStripeError(err instanceof Error ? err.message : 'Failed to load Stripe data');
+    } finally {
+      setStripeLoading(false);
+    }
+  };
+
   const handleUpdateCommissionStatus = async (id: string, newStatus: 'pending' | 'paid' | 'cancelled') => {
     setUpdatingCommId(id);
     const patch: any = { status: newStatus };
@@ -313,6 +344,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
 
   const totalPendingComm = commissions.filter(c => c.status === 'pending').reduce((s, c) => s + c.amount_cents, 0);
   const totalPaidComm    = commissions.filter(c => c.status === 'paid').reduce((s, c) => s + c.amount_cents, 0);
+  const now        = new Date();
   const fmtDollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
   const getTierBadge = (tier: string) => tier === 'elite'
@@ -705,15 +737,160 @@ export function AdminPage({ onBack }: AdminPageProps) {
           )}
 
           {/* ── REVENUE ── */}
-          {activeTab === 'revenue' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6"><div className="text-sm text-gray-500 mb-2">Monthly Recurring Revenue</div><div className="text-3xl font-bold text-green-400">${((stats?.eliteUsers || 0) * 97).toLocaleString()}</div><div className="text-xs text-gray-600 mt-1">{stats?.eliteUsers || 0} Elite × $97/month</div></div>
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6"><div className="text-sm text-gray-500 mb-2">Referral Commissions Owed</div><div className="text-3xl font-bold text-amber-400">{fmtDollars(totalPendingComm)}</div><div className="text-xs text-gray-600 mt-1">{commissions.filter(c => c.status === 'pending').length} pending · {fmtDollars(totalPaidComm)} paid</div></div>
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6"><div className="text-sm text-gray-500 mb-2">Conversion Rate</div><div className="text-3xl font-bold text-cyan-400">{stats?.totalUsers ? ((stats.eliteUsers / stats.totalUsers) * 100).toFixed(1) : 0}%</div><div className="text-xs text-gray-600 mt-1">{stats?.eliteUsers || 0} paid / {stats?.totalUsers || 0} total</div></div>
+          {activeTab === 'revenue' && (() => {
+            const rev = stripeRevenue;
+            const maxBar = rev ? Math.max(...rev.monthlyRevenue.map(m => m.amountDollars), 1) : 1;
+            return (
+              <div className="space-y-6">
+
+                {/* Load button */}
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold">Live Stripe Revenue</h2>
+                    {rev && <p className="text-xs text-gray-600 mt-0.5">Updated {new Date(rev.generatedAt).toLocaleTimeString()}</p>}
+                  </div>
+                  <button
+                    onClick={loadStripeRevenue}
+                    disabled={stripeLoading}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 rounded-xl text-sm font-semibold text-white transition-all"
+                  >
+                    {stripeLoading ? <><Loader2 className="w-4 h-4 animate-spin" />Loading…</> : <><RefreshCw className="w-4 h-4" />Pull from Stripe</>}
+                  </button>
+                </div>
+
+                {stripeError && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />{stripeError}
+                  </div>
+                )}
+
+                {!rev && !stripeLoading && !stripeError && (
+                  <div className="bg-gray-900 border border-dashed border-gray-700 rounded-2xl p-12 text-center">
+                    <DollarSign className="w-12 h-12 mx-auto mb-3 text-gray-700" />
+                    <p className="text-gray-400 font-semibold mb-1">Click "Pull from Stripe" to load live data</p>
+                    <p className="text-xs text-gray-600">Fetches real subscriptions, invoices, MRR and ARR directly from your Stripe account.</p>
+                  </div>
+                )}
+
+                {stripeLoading && (
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-12 flex flex-col items-center gap-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+                    <p className="text-gray-400 text-sm">Fetching subscriptions and invoices from Stripe…</p>
+                  </div>
+                )}
+
+                {rev && (
+                  <>
+                    {/* ── Top stats ── */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[
+                        { label: 'MRR',             value: `$${rev.mrr.toLocaleString()}`,            sub: 'Monthly Recurring Revenue',        color: 'text-green-400' },
+                        { label: 'ARR',             value: `$${rev.arr.toLocaleString()}`,            sub: 'Annual Run Rate',                  color: 'text-emerald-400' },
+                        { label: 'Active Subs',     value: rev.activeCount,                            sub: `${rev.pastDueCount} past-due`,     color: 'text-cyan-400' },
+                        { label: 'Monthly Churn',   value: `${rev.churnRate}%`,                        sub: `${rev.canceledThisMonth} cancelled this month`,  color: rev.churnRate > 5 ? 'text-red-400' : 'text-amber-400' },
+                      ].map(card => (
+                        <div key={card.label} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                          <div className="text-xs text-gray-500 mb-1">{card.label}</div>
+                          <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
+                          <div className="text-xs text-gray-600 mt-0.5">{card.sub}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── This month snapshot ── */}
+                    <div className="grid grid-cols-3 gap-4">
+                      {[
+                        { label: 'New this month',     value: rev.newThisMonth,      color: 'text-green-400',  bg: 'bg-green-500/10 border-green-500/20'  },
+                        { label: 'Cancelled this month', value: rev.canceledThisMonth, color: 'text-red-400',   bg: 'bg-red-500/10 border-red-500/20'     },
+                        { label: 'Net this month',      value: rev.newThisMonth - rev.canceledThisMonth, color: rev.newThisMonth >= rev.canceledThisMonth ? 'text-green-400' : 'text-red-400', bg: 'bg-gray-800 border-gray-700' },
+                      ].map(card => (
+                        <div key={card.label} className={`border rounded-xl p-4 text-center ${card.bg}`}>
+                          <div className={`text-3xl font-bold mb-1 ${card.color}`}>{card.value > 0 ? `+${card.value}` : card.value}</div>
+                          <div className="text-xs text-gray-500">{card.label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── Revenue bar chart (6 months) ── */}
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-5">
+                        <span className="font-semibold">Monthly Revenue — Last 6 Months</span>
+                        <span className="text-xs text-gray-500">6-month total: <span className="text-green-400 font-medium">${rev.sixMonthTotalDollars.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+                      </div>
+                      <div className="flex items-end gap-3 h-36">
+                        {rev.monthlyRevenue.map(m => {
+                          const pct = maxBar > 0 ? (m.amountDollars / maxBar) * 100 : 0;
+                          const isCurrentMonth = m.month === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                          return (
+                            <div key={m.month} className="flex-1 flex flex-col items-center gap-1.5 group">
+                              <span className="text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">${m.amountDollars.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                              <div className="w-full flex flex-col justify-end" style={{ height: '96px' }}>
+                                <div
+                                  className={`w-full rounded-t-lg transition-all ${isCurrentMonth ? 'bg-cyan-500' : 'bg-gray-700 group-hover:bg-gray-600'}`}
+                                  style={{ height: `${Math.max(pct, 4)}%` }}
+                                />
+                              </div>
+                              <span className={`text-[10px] font-medium ${isCurrentMonth ? 'text-cyan-400' : 'text-gray-500'}`}>{m.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ── Referral commissions ── */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <div className="text-xs text-gray-500 mb-1">Commissions Owed</div>
+                        <div className="text-2xl font-bold text-amber-400">{fmtDollars(totalPendingComm)}</div>
+                        <div className="text-xs text-gray-600 mt-0.5">{commissions.filter(c => c.status === 'pending').length} pending payments to referrers</div>
+                      </div>
+                      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <div className="text-xs text-gray-500 mb-1">Net MRR (after commissions)</div>
+                        <div className="text-2xl font-bold text-green-400">${(rev.mrr - (totalPendingComm / 100)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                        <div className="text-xs text-gray-600 mt-0.5">MRR minus pending referral payouts</div>
+                      </div>
+                    </div>
+
+                    {/* ── Recent invoices ── */}
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                      <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+                        <span className="font-semibold">Recent Paid Invoices</span>
+                        <button
+                          onClick={() => downloadCSV(
+                            ['Invoice ID','Email','Amount','Date','Status'],
+                            rev.recentInvoices.map(inv => [inv.id, demoMode ? demoMaskEmail(inv.email) : inv.email, `$${inv.amount.toFixed(2)}`, new Date(inv.date).toLocaleDateString(), inv.status])
+                          , 'nxxt-invoices')}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 border border-gray-700"
+                        >
+                          <Download className="w-4 h-4" /> CSV
+                        </button>
+                      </div>
+                      {rev.recentInvoices.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500 text-sm">No paid invoices in this period.</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead><tr className="border-b border-gray-800 text-left">{['Invoice','Email','Amount','Date','Status'].map(h => <th key={h} className="py-3 px-4 text-gray-500 text-xs font-medium">{h}</th>)}</tr></thead>
+                            <tbody>
+                              {rev.recentInvoices.map(inv => (
+                                <tr key={inv.id} className="border-b border-gray-800/50 hover:bg-white/5">
+                                  <td className="py-3 px-4 font-mono text-xs text-gray-500">{inv.id.slice(0, 14)}…</td>
+                                  <td className="py-3 px-4">{demoMode ? demoMaskEmail(inv.email) : inv.email}</td>
+                                  <td className="py-3 px-4 text-green-400 font-medium">${inv.amount.toFixed(2)}</td>
+                                  <td className="py-3 px-4 text-gray-500 text-xs">{new Date(inv.date).toLocaleDateString()}</td>
+                                  <td className="py-3 px-4"><span className="px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">Paid ✓</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── NOTIFICATIONS ── */}
           {activeTab === 'notifications' && (
