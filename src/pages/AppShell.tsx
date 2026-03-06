@@ -1,5 +1,6 @@
 // src/pages/AppShell.tsx
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Flame, BarChart2, LogOut, History, BookOpen,
   Menu, X, ChevronRight, Shield, GraduationCap, Settings
@@ -19,6 +20,8 @@ import { DataAnalysis }      from '../lib/supabase';
 
 type Tab = 'hot-picks' | 'data-analysis' | 'journal' | 'history' | 'education' | 'settings' | 'admin';
 
+const VALID_SHELL_TABS: Tab[] = ['hot-picks', 'data-analysis', 'journal', 'history', 'education', 'settings', 'admin'];
+
 const BASE_TABS: { id: Tab; label: string; icon: React.ReactNode; description: string }[] = [
   { id: 'hot-picks',     label: 'Hot Picks',    icon: <Flame         className="w-5 h-5" />, description: 'Live AI signals' },
   { id: 'data-analysis', label: 'Data Analysis', icon: <BarChart2     className="w-5 h-5" />, description: 'Analyze any futures chart' },
@@ -36,13 +39,30 @@ const ADMIN_TAB = {
 };
 
 export function AppShell() {
-  const [activeTab,      setActiveTab]      = useState<Tab>('hot-picks');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [menuOpen,       setMenuOpen]       = useState(false);
   const [journalPrefill, setJournalPrefill] = useState<DataAnalysis | null>(null);
   const { signOut, profile } = useAuth();
 
   const isAdmin = profile?.is_admin === true;
   const TABS = isAdmin ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;
+
+  // Read active tab from URL — default to 'hot-picks' if missing or invalid
+  const urlTab = searchParams.get('tab') as Tab | null;
+  const resolvedTab: Tab = (urlTab && VALID_SHELL_TABS.includes(urlTab)) ? urlTab : 'hot-picks';
+  // Non-admin users can't land on admin tab even if URL says so
+  const activeTab: Tab = (resolvedTab === 'admin' && !isAdmin) ? 'hot-picks' : resolvedTab;
+
+  // Central tab setter — writes to URL so F5 preserves position
+  const setActiveTab = (tab: Tab) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      // When leaving admin, clean up the admin-specific param too
+      if (tab !== 'admin') next.delete('admintab');
+      return next;
+    });
+  };
 
   useEffect(() => {
     const handler = () => { if (window.innerWidth >= 640) setMenuOpen(false); };
@@ -67,7 +87,7 @@ export function AppShell() {
 
   const currentTab = TABS.find(t => t.id === activeTab) ?? TABS[0];
 
-  // Colour helper
+  // Colour helpers
   const tabColour = (id: Tab, active: boolean) => {
     if (!active) return 'text-gray-500 hover:text-gray-300 hover:bg-white/5';
     return id === 'admin'
