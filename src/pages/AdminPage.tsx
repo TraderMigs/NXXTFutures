@@ -1,8 +1,9 @@
 // src/pages/AdminPage.tsx
 // NXXT Futures — God-Tier Admin Panel
-// Adapted from NXXT Algo · Enhanced with quiz progress, user IDs, email toggle, promo KPIs
+// Phase 1: URL tab persistence, back arrow, demo mode, CSV on all tabs
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Navigate } from 'react-router-dom';
@@ -10,7 +11,8 @@ import {
   Users, BarChart3, Shield, Activity, Loader2, Edit2, Trash2,
   DollarSign, TrendingUp, Database, AlertCircle, Download, Search,
   X, Check, Tag, Settings, FileText, ClipboardList, Flame, Bell,
-  Eye, EyeOff, Trophy, BookOpen, Gift, RefreshCw
+  Eye, EyeOff, Trophy, BookOpen, Gift, RefreshCw, ArrowLeft, EyeIcon,
+  ChevronLeft
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────
@@ -93,6 +95,8 @@ interface Signal {
 
 type TabType = 'dashboard' | 'users' | 'education' | 'signals' | 'promos' | 'revenue' | 'notifications' | 'system';
 
+const VALID_TABS: TabType[] = ['dashboard', 'users', 'education', 'signals', 'promos', 'revenue', 'notifications', 'system'];
+
 // ─── CSV export helper ────────────────────────────────────────
 function downloadCSV(headers: string[], rows: (string | number | null | undefined)[][], filename: string) {
   const esc = (v: string | number | null | undefined): string => {
@@ -117,10 +121,30 @@ function maskEmail(email: string): string {
   return `${user.slice(0, 2)}***@${domain}`;
 }
 
+// Demo-mode email: always fully masked regardless of eye toggle
+function demoMaskEmail(email: string): string {
+  const [, domain] = email.split('@');
+  if (!domain) return 'us***@***.com';
+  return `us***@${domain}`;
+}
+
+// ─── Props ────────────────────────────────────────────────────
+interface AdminPageProps {
+  onBack?: () => void;
+}
+
 // ─── Main component ───────────────────────────────────────────
-export function AdminPage() {
+export function AdminPage({ onBack }: AdminPageProps) {
   const { profile: authProfile, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Read tab from URL on mount; default to 'dashboard'
+  const urlTab = searchParams.get('admintab') as TabType | null;
+  const initialTab: TabType = urlTab && VALID_TABS.includes(urlTab) ? urlTab : 'dashboard';
+
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [demoMode, setDemoMode] = useState(false);
+
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [quizSummary, setQuizSummary] = useState<QuizSummary[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
@@ -146,9 +170,27 @@ export function AdminPage() {
   // Email show/hide toggle state (local — for the admin's view per row)
   const [visibleEmails, setVisibleEmails] = useState<Set<string>>(new Set());
 
+  // ─── Tab change: update URL ───────────────────────────────
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('admintab', tab);
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (authProfile?.is_admin) loadAllData();
   }, [authProfile]);
+
+  // Sync if URL changes externally (browser back/forward)
+  useEffect(() => {
+    const t = searchParams.get('admintab') as TabType | null;
+    if (t && VALID_TABS.includes(t) && t !== activeTab) {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
 
   const loadAllData = async () => {
     setLoading(true);
@@ -307,6 +349,13 @@ export function AdminPage() {
     });
   };
 
+  // ─── Display email — respects demo mode ──────────────────
+  const displayEmail = (email: string, id: string) => {
+    if (demoMode) return demoMaskEmail(email);
+    const shown = visibleEmails.has(id);
+    return shown ? email : maskEmail(email);
+  };
+
   // Filter helpers
   const filteredUsers = users.filter(u => {
     const emailMatch = u.email.toLowerCase().includes(userSearch.toLowerCase());
@@ -360,19 +409,61 @@ export function AdminPage() {
       <div className="max-w-7xl mx-auto">
 
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <Shield className="w-7 h-7 text-purple-500" />
-              <h1 className="text-3xl font-bold">Admin Panel</h1>
-              <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs font-semibold rounded-full border border-purple-500/30">NXXT Futures</span>
+        <div className="mb-8">
+          {/* Back arrow row */}
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1.5 text-gray-500 hover:text-gray-300 text-sm mb-4 transition-colors group"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              Back to Dashboard
+            </button>
+          )}
+
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <Shield className="w-7 h-7 text-purple-500" />
+                <h1 className="text-3xl font-bold">Admin Panel</h1>
+                <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs font-semibold rounded-full border border-purple-500/30">NXXT Futures</span>
+              </div>
+              <p className="text-gray-500 text-sm">Full system control · iconmigs@gmail.com</p>
             </div>
-            <p className="text-gray-500 text-sm">Full system control · iconmigs@gmail.com</p>
+
+            {/* Header action buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Demo Mode toggle */}
+              <button
+                onClick={() => setDemoMode(d => !d)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                  demoMode
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 hover:bg-amber-500/30'
+                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white'
+                }`}
+                title="Demo Mode hides real user emails for presentations"
+              >
+                {demoMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {demoMode ? 'Demo ON' : 'Demo Mode'}
+              </button>
+
+              <button
+                onClick={loadAllData}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors border border-gray-700"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            </div>
           </div>
-          <button onClick={loadAllData} className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors">
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
+
+          {/* Demo mode notice */}
+          {demoMode && (
+            <div className="mt-3 px-4 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-xs flex items-center gap-2">
+              <EyeOff className="w-3.5 h-3.5 flex-shrink-0" />
+              Demo Mode is ON — all user emails are masked. Nothing in the database is changed. Toggle off to see real data.
+            </div>
+          )}
         </div>
 
         {error && (
@@ -387,7 +478,7 @@ export function AdminPage() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors whitespace-nowrap relative ${
                     activeTab === tab.id
                       ? 'border-cyan-500 text-cyan-400'
@@ -456,7 +547,7 @@ export function AdminPage() {
                   <div className="flex items-center gap-2 mb-4">
                     <Gift className="w-5 h-5 text-green-400" />
                     <h2 className="font-bold">GRADUATE50 Promo Performance</h2>
-                    <button onClick={() => setActiveTab('promos')} className="ml-auto text-xs text-cyan-400 hover:text-cyan-300">View full KPIs →</button>
+                    <button onClick={() => handleTabChange('promos')} className="ml-auto text-xs text-cyan-400 hover:text-cyan-300">View full KPIs →</button>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                     {[
@@ -481,7 +572,7 @@ export function AdminPage() {
                     <span className="text-sm text-cyan-400">
                       You have <strong>{unreadNotifs}</strong> unread notification{unreadNotifs > 1 ? 's' : ''}
                     </span>
-                    <button onClick={() => setActiveTab('notifications')} className="ml-auto text-xs text-cyan-400 underline">
+                    <button onClick={() => handleTabChange('notifications')} className="ml-auto text-xs text-cyan-400 underline">
                       View →
                     </button>
                   </div>
@@ -515,19 +606,28 @@ export function AdminPage() {
                   <button
                     onClick={() => downloadCSV(
                       ['#', 'Email', 'Tier', 'Education %', 'Badge', 'Admin', 'Joined'],
-                      filteredUsers.map(u => [u.user_number, u.email, u.subscription_tier, u.education_completion_pct, u.education_badge_earned ? 'Yes' : 'No', u.is_admin ? 'Yes' : 'No', new Date(u.created_at).toLocaleDateString()]),
+                      filteredUsers.map(u => [
+                        u.user_number,
+                        demoMode ? demoMaskEmail(u.email) : u.email,
+                        u.subscription_tier,
+                        u.education_completion_pct,
+                        u.education_badge_earned ? 'Yes' : 'No',
+                        u.is_admin ? 'Yes' : 'No',
+                        new Date(u.created_at).toLocaleDateString()
+                      ]),
                       'nxxt-futures-users'
                     )}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors whitespace-nowrap"
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors whitespace-nowrap border border-gray-700"
                   >
-                    <Download className="w-4 h-4" /> CSV
+                    <Download className="w-4 h-4" /> Download CSV
                   </button>
                 </div>
 
                 <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                   <div className="p-4 border-b border-gray-800 flex items-center justify-between">
                     <span className="font-semibold">All Users ({filteredUsers.length})</span>
-                    <span className="text-xs text-gray-500">Eye icon = toggle email visibility in this view</span>
+                    {!demoMode && <span className="text-xs text-gray-500">Eye icon = toggle email visibility</span>}
+                    {demoMode && <span className="text-xs text-amber-400/70">Demo Mode — emails masked</span>}
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
@@ -547,17 +647,19 @@ export function AdminPage() {
                           const emailShown = visibleEmails.has(user.id);
                           return (
                             <tr key={user.id} className="border-b border-gray-800/50 hover:bg-white/5">
-                              <td className="py-3 px-4 text-gray-500 text-sm font-mono">#{user.user_number || '—'}</td>
+                              <td className="py-3 px-4 text-gray-500 text-sm font-mono">#{demoMode ? user.user_number?.toString().slice(0, 4) + '****' : (user.user_number || '—')}</td>
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-sm">{emailShown ? user.email : maskEmail(user.email)}</span>
-                                  <button
-                                    onClick={() => toggleEmailView(user.id)}
-                                    className="text-gray-600 hover:text-gray-400 transition-colors"
-                                    title={emailShown ? 'Hide email' : 'Show email'}
-                                  >
-                                    {emailShown ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                                  </button>
+                                  <span className="text-sm">{displayEmail(user.email, user.id)}</span>
+                                  {!demoMode && (
+                                    <button
+                                      onClick={() => toggleEmailView(user.id)}
+                                      className="text-gray-600 hover:text-gray-400 transition-colors"
+                                      title={emailShown ? 'Hide email' : 'Show email'}
+                                    >
+                                      {emailShown ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                               <td className="py-3 px-4">{getTierBadge(user.subscription_tier)}</td>
@@ -628,12 +730,23 @@ export function AdminPage() {
                     <button
                       onClick={() => downloadCSV(
                         ['#', 'Email', 'Tier', 'Completion %', 'Badge', 'Sections', 'Promo Sent', 'Promo Expires', 'Redeemed', 'Revenue'],
-                        quizSummary.map(q => [q.user_number, q.email, q.subscription_tier, q.education_completion_pct, q.education_badge_earned ? 'Yes' : 'No', `${q.sections_completed}/8`, q.promo_sent_at ? new Date(q.promo_sent_at).toLocaleDateString() : 'N/A', q.promo_expires_at ? new Date(q.promo_expires_at).toLocaleDateString() : 'N/A', q.promo_redeemed ? 'Yes' : 'No', q.promo_revenue || 0]),
+                        quizSummary.map(q => [
+                          q.user_number,
+                          demoMode ? demoMaskEmail(q.email) : q.email,
+                          q.subscription_tier,
+                          q.education_completion_pct,
+                          q.education_badge_earned ? 'Yes' : 'No',
+                          `${q.sections_completed}/8`,
+                          q.promo_sent_at ? new Date(q.promo_sent_at).toLocaleDateString() : 'N/A',
+                          q.promo_expires_at ? new Date(q.promo_expires_at).toLocaleDateString() : 'N/A',
+                          q.promo_redeemed ? 'Yes' : 'No',
+                          q.promo_revenue || 0
+                        ]),
                         'nxxt-education-progress'
                       )}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors"
+                      className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors border border-gray-700"
                     >
-                      <Download className="w-4 h-4" /> CSV
+                      <Download className="w-4 h-4" /> Download CSV
                     </button>
                   </div>
                   <div className="overflow-x-auto">
@@ -660,10 +773,12 @@ export function AdminPage() {
                               <td className="py-3 px-4 text-gray-500 text-sm font-mono">#{q.user_number || '—'}</td>
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-sm">{emailShown ? q.email : maskEmail(q.email)}</span>
-                                  <button onClick={() => toggleEmailView(q.user_id)} className="text-gray-600 hover:text-gray-400">
-                                    {emailShown ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                                  </button>
+                                  <span className="text-sm">{displayEmail(q.email, q.user_id)}</span>
+                                  {!demoMode && (
+                                    <button onClick={() => toggleEmailView(q.user_id)} className="text-gray-600 hover:text-gray-400">
+                                      {emailShown ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                               <td className="py-3 px-4">{getTierBadge(q.subscription_tier)}</td>
@@ -707,7 +822,7 @@ export function AdminPage() {
             {/* ── SIGNALS ── */}
             {activeTab === 'signals' && (
               <div className="space-y-4">
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                     <input
@@ -718,19 +833,37 @@ export function AdminPage() {
                       className="w-full pl-9 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm"
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                    <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
-                      <div className="font-bold text-green-400">{signals.filter(s => s.status === 'ACTIVE').length}</div>
-                      <div className="text-xs text-gray-500">Active</div>
+                  <div className="flex items-center gap-2">
+                    <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                      <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
+                        <div className="font-bold text-green-400">{signals.filter(s => s.status === 'ACTIVE').length}</div>
+                        <div className="text-xs text-gray-500">Active</div>
+                      </div>
+                      <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
+                        <div className="font-bold text-gray-400">{signals.filter(s => s.status === 'EXPIRED').length}</div>
+                        <div className="text-xs text-gray-500">Expired</div>
+                      </div>
+                      <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
+                        <div className="font-bold text-blue-400">{signals.filter(s => ['TP1_HIT', 'TP2_HIT', 'TP3_HIT'].includes(s.status)).length}</div>
+                        <div className="text-xs text-gray-500">TP Hits</div>
+                      </div>
                     </div>
-                    <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
-                      <div className="font-bold text-gray-400">{signals.filter(s => s.status === 'EXPIRED').length}</div>
-                      <div className="text-xs text-gray-500">Expired</div>
-                    </div>
-                    <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
-                      <div className="font-bold text-blue-400">{signals.filter(s => ['TP1_HIT', 'TP2_HIT', 'TP3_HIT'].includes(s.status)).length}</div>
-                      <div className="text-xs text-gray-500">TP Hits</div>
-                    </div>
+                    {/* CSV Download for Signals */}
+                    <button
+                      onClick={() => downloadCSV(
+                        ['Symbol', 'Direction', 'Confidence', 'Status', 'Setup', 'Entry Min', 'Entry Max', 'Stop Loss', 'TP1', 'Created', 'Expires'],
+                        filteredSignals.map(s => [
+                          s.symbol, s.direction, s.confidence, s.status, s.setup_status,
+                          s.entry_zone_min, s.entry_zone_max, s.stop_loss, s.tp1,
+                          new Date(s.created_at).toLocaleString(),
+                          new Date(s.expires_at).toLocaleString()
+                        ]),
+                        'nxxt-futures-signals'
+                      )}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors whitespace-nowrap border border-gray-700"
+                    >
+                      <Download className="w-4 h-4" /> Download CSV
+                    </button>
                   </div>
                 </div>
 
@@ -838,7 +971,7 @@ export function AdminPage() {
                     <div>
                       <p className="text-amber-400 font-semibold mb-1">Stripe Setup Required</p>
                       <p className="text-gray-400">
-                        Create a coupon code <strong className="text-white font-mono">GRADUATE50</strong> in your Stripe Dashboard (50% off first month, max 1 use per customer). 
+                        Create a coupon code <strong className="text-white font-mono">GRADUATE50</strong> in your Stripe Dashboard (50% off first month, max 1 use per customer).
                         NXXT Futures will email it automatically when users complete Futures Basics.
                       </p>
                     </div>
@@ -850,6 +983,29 @@ export function AdminPage() {
             {/* ── REVENUE ── */}
             {activeTab === 'revenue' && (
               <div className="space-y-6">
+                {/* CSV Download for Revenue */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => downloadCSV(
+                      ['Metric', 'Value'],
+                      [
+                        ['Elite Users', stats?.eliteUsers || 0],
+                        ['Free Users', stats?.freeUsers || 0],
+                        ['Total Users', stats?.totalUsers || 0],
+                        ['MRR ($)', (stats?.eliteUsers || 0) * 97],
+                        ['Promo Revenue ($)', (promoStats?.totalRevenue || 0).toFixed(2)],
+                        ['Projected Annual ($)', (stats?.eliteUsers || 0) * 97 * 12],
+                        ['Free-to-Elite Conversion %', stats?.totalUsers ? (((stats.eliteUsers / stats.totalUsers) * 100).toFixed(1)) : '0'],
+                        ['Report Date', new Date().toLocaleDateString()],
+                      ],
+                      'nxxt-futures-revenue'
+                    )}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors border border-gray-700"
+                  >
+                    <Download className="w-4 h-4" /> Download CSV
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
                     <div className="text-sm text-gray-500 mb-2">Monthly Recurring Revenue</div>
@@ -969,14 +1125,56 @@ export function AdminPage() {
                     </button>
                     <button
                       onClick={() => downloadCSV(
-                        ['Symbol', 'Direction', 'Confidence', 'Status', 'Setup', 'Entry', 'Stop', 'Created'],
-                        signals.map(s => [s.symbol, s.direction, s.confidence, s.status, s.setup_status, s.entry_zone_min, s.stop_loss, new Date(s.created_at).toLocaleString()]),
+                        ['Symbol', 'Direction', 'Confidence', 'Status', 'Setup', 'Entry Min', 'Entry Max', 'Stop Loss', 'TP1', 'Created', 'Expires'],
+                        signals.map(s => [
+                          s.symbol, s.direction, s.confidence, s.status, s.setup_status,
+                          s.entry_zone_min, s.entry_zone_max, s.stop_loss, s.tp1,
+                          new Date(s.created_at).toLocaleString(),
+                          new Date(s.expires_at).toLocaleString()
+                        ]),
                         'nxxt-signals'
                       )}
                       className="flex items-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
                     >
                       <Download className="w-4 h-4 text-green-400" />
                       Export Signals CSV
+                    </button>
+                    <button
+                      onClick={() => downloadCSV(
+                        ['#', 'Email', 'Tier', 'Education %', 'Badge', 'Admin', 'Joined'],
+                        users.map(u => [
+                          u.user_number,
+                          demoMode ? demoMaskEmail(u.email) : u.email,
+                          u.subscription_tier,
+                          u.education_completion_pct,
+                          u.education_badge_earned ? 'Yes' : 'No',
+                          u.is_admin ? 'Yes' : 'No',
+                          new Date(u.created_at).toLocaleDateString()
+                        ]),
+                        'nxxt-futures-all-users'
+                      )}
+                      className="flex items-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+                    >
+                      <Download className="w-4 h-4 text-purple-400" />
+                      Export Users CSV
+                    </button>
+                    <button
+                      onClick={() => downloadCSV(
+                        ['Metric', 'Value'],
+                        [
+                          ['Elite Users', stats?.eliteUsers || 0],
+                          ['Free Users', stats?.freeUsers || 0],
+                          ['Total Users', stats?.totalUsers || 0],
+                          ['MRR ($)', (stats?.eliteUsers || 0) * 97],
+                          ['Projected Annual ($)', (stats?.eliteUsers || 0) * 97 * 12],
+                          ['Report Date', new Date().toLocaleDateString()],
+                        ],
+                        'nxxt-futures-revenue-summary'
+                      )}
+                      className="flex items-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+                    >
+                      <Download className="w-4 h-4 text-amber-400" />
+                      Export Revenue CSV
                     </button>
                   </div>
                 </div>
