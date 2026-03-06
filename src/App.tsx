@@ -1,3 +1,4 @@
+// src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
@@ -9,6 +10,7 @@ import { FuturesBasicsPage } from './pages/FuturesBasicsPage';
 import { PaymentSuccessPage } from './pages/PaymentSuccessPage';
 import { AuthConfirmPage } from './pages/AuthConfirmPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { SupportWidget } from './components/SupportWidget';
 
 export default function App() {
   return (
@@ -33,6 +35,8 @@ export default function App() {
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          {/* Support widget — visible on ALL pages, logged in or out */}
+          <SupportWidget />
         </div>
       </BrowserRouter>
     </AuthProvider>
