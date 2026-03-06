@@ -3,6 +3,14 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+// ── Payout method type ────────────────────────────────────────
+export interface PayoutMethod {
+  id: string;
+  type: string;
+  details: string;
+  primary: boolean;
+}
+
 // ── Profile type ──────────────────────────────────────────────
 interface Profile {
   id: string;
@@ -17,6 +25,12 @@ interface Profile {
   education_badge_earned_at: string | null;
   education_completion_pct: number;
   referral_code: string | null;
+  referral_slug: string | null;
+  referral_display_name: string | null;
+  payout_methods: PayoutMethod[] | null;
+  tos_accepted_at: string | null;
+  tos_version: string | null;
+  age_verified: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -99,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ── signUp — now accepts optional referralCode ─────────────
+  // ── signUp — accepts optional referralCode (slug OR legacy code) ──
   const signUp = async (email: string, password: string, referralCode?: string) => {
     try {
       const { data, error } = await supabase.auth.signUp({ email, password });
@@ -113,19 +127,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           bypass_stripe: false,
         }, { onConflict: 'id' });
 
-        // ── Referral tracking ─────────────────────────────────
-        // If a valid referral code was passed, find the referrer and create a referral record
+        // ── Referral tracking: try slug first, then legacy code ──────
         if (referralCode) {
           try {
-            const { data: referrerData } = await supabase
+            let referrerId: string | null = null;
+
+            // 1. Try slug (lowercase)
+            const { data: bySlug } = await supabase
               .from('profiles')
               .select('id')
-              .eq('referral_code', referralCode.toUpperCase())
+              .eq('referral_slug', referralCode.toLowerCase())
               .single();
 
-            if (referrerData?.id && referrerData.id !== data.user.id) {
+            if (bySlug?.id) {
+              referrerId = bySlug.id;
+            } else {
+              // 2. Fall back to legacy auto-generated code (uppercase)
+              const { data: byCode } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('referral_code', referralCode.toUpperCase())
+                .single();
+              if (byCode?.id) referrerId = byCode.id;
+            }
+
+            if (referrerId && referrerId !== data.user.id) {
               await supabase.from('referrals').insert({
-                referrer_id:    referrerData.id,
+                referrer_id:    referrerId,
                 referred_email: email,
                 referred_id:    data.user.id,
                 status:         'pending',
@@ -138,13 +166,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // ── Welcome email ─────────────────────────────────────
+        // ── Welcome email ─────────────────────────────────────────────
         try {
           await supabase.functions.invoke('send-email', {
             body: { type: 'welcome', email: email },
           });
         } catch {
-          console.warn('send-email edge function not available — welcome email skipped');
+          console.warn('send-email edge function not available — skipped');
         }
 
         await loadProfile(data.user.id);

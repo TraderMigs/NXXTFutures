@@ -9,6 +9,7 @@ import { PricingPage } from './pages/PricingPage';
 import { FuturesBasicsPage } from './pages/FuturesBasicsPage';
 import { PaymentSuccessPage } from './pages/PaymentSuccessPage';
 import { AuthConfirmPage } from './pages/AuthConfirmPage';
+import { TermsPage } from './pages/TermsPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { SupportWidget } from './components/SupportWidget';
 
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/payment-success" element={<PaymentSuccessPage />} />
             <Route path="/auth/confirm"    element={<AuthConfirmPage />} />
             <Route path="/login"           element={<LoginPage />} />
+            <Route path="/terms"           element={<TermsPage />} />
             <Route
               path="/app"
               element={

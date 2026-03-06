@@ -1,6 +1,6 @@
 // src/pages/SettingsTab.tsx
 import { useState } from 'react';
-import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, LogOut, Trash2, Crown, Share2, Copy } from 'lucide-react';
+import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, LogOut, Trash2, Crown, Share2, Copy, Shield, ExternalLink } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -69,13 +69,16 @@ export function SettingsTab() {
     setTimeout(() => setRefCopied(false), 2500);
   };
 
-  const isElite = profile?.subscription_tier === 'elite';
-  const joinDate = profile?.created_at
+  const isElite   = profile?.subscription_tier === 'elite';
+  const tosActive = !!profile?.tos_accepted_at;
+  const joinDate  = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : '—';
 
-  const referralLink = profile?.referral_code
-    ? `https://www.nxxtfutures.com/signup?ref=${profile.referral_code}`
+  // Show slug if set, otherwise fall back to legacy referral_code
+  const activeRef    = profile?.referral_slug ?? profile?.referral_code ?? null;
+  const referralLink = activeRef
+    ? `https://www.nxxtfutures.com/signup?ref=${activeRef}`
     : null;
 
   return (
@@ -141,13 +144,28 @@ export function SettingsTab() {
             <div className="font-display font-semibold text-white text-sm">Refer & Earn</div>
             <div className="text-xs text-gray-500">Earn $25/month for every trader you refer</div>
           </div>
-          <span className="text-gray-600 text-lg">›</span>
+          <div className="flex items-center gap-2">
+            {/* TOS status badge */}
+            {tosActive
+              ? <span className="flex items-center gap-1 text-[10px] bg-green-500/10 border border-green-500/20 text-green-400 px-2 py-0.5 rounded-full"><Shield className="w-2.5 h-2.5" /> Active</span>
+              : <span className="flex items-center gap-1 text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">Setup needed</span>
+            }
+            <span className="text-gray-600 text-lg">›</span>
+          </div>
         </button>
 
         {/* Quick copy row */}
         {referralLink && (
           <div className="px-5 pb-4 border-t border-[#1E2128] pt-3">
-            <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-2">Your referral link</p>
+            {/* Show active slug or code */}
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-[10px] text-gray-600 uppercase tracking-wider">Your referral link</p>
+              {profile?.referral_slug && (
+                <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full">
+                  Custom: /{profile.referral_slug}
+                </span>
+              )}
+            </div>
             <div className="flex gap-2">
               <div className="flex-1 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg px-3 py-2 text-xs text-gray-400 font-mono truncate">
                 {referralLink}
@@ -168,6 +186,27 @@ export function SettingsTab() {
         )}
       </div>
 
+      {/* ── Terms of Service ──────────────────────────────── */}
+      <div className="bg-[#111318] border border-[#1E2128] rounded-2xl overflow-hidden">
+        <button
+          onClick={() => window.open('/terms', '_blank')}
+          className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/3 transition-colors text-left"
+        >
+          <div className="w-9 h-9 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Shield className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="flex-1">
+            <div className="font-display font-semibold text-white text-sm">Terms of Service</div>
+            <div className="text-xs text-gray-500">
+              {profile?.tos_accepted_at
+                ? `Accepted ${new Date(profile.tos_accepted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                : 'Referral payout terms & program rules'}
+            </div>
+          </div>
+          <ExternalLink className="w-4 h-4 text-gray-600" />
+        </button>
+      </div>
+
       {/* ── Change Password ───────────────────────────────── */}
       <div className="bg-[#111318] border border-[#1E2128] rounded-2xl overflow-hidden">
         <button
@@ -186,7 +225,6 @@ export function SettingsTab() {
 
         {pwSection && (
           <div className="px-5 pb-5 border-t border-[#1E2128] space-y-3 pt-4">
-            {/* New password */}
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">New Password</label>
               <div className="relative">
@@ -203,8 +241,6 @@ export function SettingsTab() {
                 </button>
               </div>
             </div>
-
-            {/* Confirm password */}
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">Confirm New Password</label>
               <div className="relative">
@@ -315,7 +351,12 @@ export function SettingsTab() {
         )}
       </div>
 
-      <p className="text-center text-gray-700 text-xs pb-4">NXXT Futures · Private Terminal · v1.0</p>
+      <p className="text-center text-gray-700 text-xs pb-4">
+        NXXT Futures · Private Terminal · v1.0 ·{' '}
+        <button onClick={() => window.open('/terms', '_blank')} className="underline hover:text-gray-500 transition-colors">
+          Terms of Service
+        </button>
+      </p>
     </div>
   );
 }
