@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Flame, BarChart2, LogOut, History, BookOpen,
-  Menu, X, ChevronRight, Shield, GraduationCap, Settings
+  Menu, X, ChevronRight, Shield, GraduationCap, Settings, Share2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { HotPicksTab }       from './HotPicksTab';
@@ -13,14 +13,18 @@ import { TradingJournalTab } from './TradingJournalTab';
 import { FuturesBasicsPage } from './FuturesBasicsPage';
 import { AdminPage }         from './AdminPage';
 import { SettingsTab }       from './SettingsTab';
+import { ReferralPage }      from './ReferralPage';
 import { PWAInstallPrompt }  from '../components/PWAInstallPrompt';
 import { UpgradeModal }      from '../components/UpgradeModal';
 import { TierProvider }      from '../contexts/TierContext';
 import { DataAnalysis }      from '../lib/supabase';
 
-type Tab = 'hot-picks' | 'data-analysis' | 'journal' | 'history' | 'education' | 'settings' | 'admin';
+type Tab = 'hot-picks' | 'data-analysis' | 'journal' | 'history' | 'education' | 'referral' | 'settings' | 'admin';
 
-const VALID_SHELL_TABS: Tab[] = ['hot-picks', 'data-analysis', 'journal', 'history', 'education', 'settings', 'admin'];
+const VALID_SHELL_TABS: Tab[] = [
+  'hot-picks', 'data-analysis', 'journal', 'history',
+  'education', 'referral', 'settings', 'admin',
+];
 
 const BASE_TABS: { id: Tab; label: string; icon: React.ReactNode; description: string }[] = [
   { id: 'hot-picks',     label: 'Hot Picks',    icon: <Flame         className="w-5 h-5" />, description: 'Live AI signals' },
@@ -28,6 +32,7 @@ const BASE_TABS: { id: Tab; label: string; icon: React.ReactNode; description: s
   { id: 'journal',       label: 'Journal',       icon: <BookOpen      className="w-5 h-5" />, description: 'Trade journal & AI coaching' },
   { id: 'history',       label: 'History',       icon: <History       className="w-5 h-5" />, description: 'All past analyses' },
   { id: 'education',     label: 'Learn',         icon: <GraduationCap className="w-5 h-5" />, description: 'Futures Basics — free course' },
+  { id: 'referral',      label: 'Refer & Earn',  icon: <Share2        className="w-5 h-5" />, description: 'Earn $25/month per referral' },
   { id: 'settings',      label: 'Settings',      icon: <Settings      className="w-5 h-5" />, description: 'Account, password, subscription' },
 ];
 
@@ -58,7 +63,6 @@ export function AppShell() {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.set('tab', tab);
-      // When leaving admin, clean up the admin-specific param too
       if (tab !== 'admin') next.delete('admintab');
       return next;
     });
@@ -90,32 +94,40 @@ export function AppShell() {
   // Colour helpers
   const tabColour = (id: Tab, active: boolean) => {
     if (!active) return 'text-gray-500 hover:text-gray-300 hover:bg-white/5';
-    return id === 'admin'
-      ? 'bg-purple-500/10 text-purple-400'
-      : id === 'settings'
-        ? 'bg-cyan-500/10 text-cyan-400'
-        : 'bg-amber-500/10 text-amber-400';
+    if (id === 'admin')    return 'bg-purple-500/10 text-purple-400';
+    if (id === 'settings') return 'bg-cyan-500/10 text-cyan-400';
+    if (id === 'referral') return 'bg-green-500/10 text-green-400';
+    return 'bg-amber-500/10 text-amber-400';
   };
 
-  const underlineColour = (id: Tab) =>
-    id === 'admin'
-      ? 'bg-gradient-to-r from-purple-500 to-violet-500'
-      : id === 'settings'
-        ? 'bg-gradient-to-r from-cyan-500 to-blue-500'
-        : 'bg-gradient-to-r from-amber-500 to-orange-500';
+  const underlineColour = (id: Tab) => {
+    if (id === 'admin')    return 'bg-gradient-to-r from-purple-500 to-violet-500';
+    if (id === 'settings') return 'bg-gradient-to-r from-cyan-500 to-blue-500';
+    if (id === 'referral') return 'bg-gradient-to-r from-green-500 to-emerald-500';
+    return 'bg-gradient-to-r from-amber-500 to-orange-500';
+  };
 
   const mobileActiveColour = (id: Tab, active: boolean) => {
     if (!active) return 'border-l-transparent text-gray-500 hover:text-gray-200 hover:bg-white/3';
-    return id === 'admin'
-      ? 'bg-purple-500/8 border-l-purple-400 text-purple-400'
-      : id === 'settings'
-        ? 'bg-cyan-500/8 border-l-cyan-400 text-cyan-400'
-        : 'bg-amber-500/8 border-l-amber-400 text-amber-400';
+    if (id === 'admin')    return 'bg-purple-500/8 border-l-purple-400 text-purple-400';
+    if (id === 'settings') return 'bg-cyan-500/8 border-l-cyan-400 text-cyan-400';
+    if (id === 'referral') return 'bg-green-500/8 border-l-green-400 text-green-400';
+    return 'bg-amber-500/8 border-l-amber-400 text-amber-400';
   };
 
   const mobileIconColour = (id: Tab, active: boolean) => {
-    if (!active) return 'text-gray-600';
-    return id === 'admin' ? 'text-purple-400' : id === 'settings' ? 'text-cyan-400' : 'text-amber-400';
+    if (!active)           return 'text-gray-600';
+    if (id === 'admin')    return 'text-purple-400';
+    if (id === 'settings') return 'text-cyan-400';
+    if (id === 'referral') return 'text-green-400';
+    return 'text-amber-400';
+  };
+
+  const activeLabelColour = (id: Tab) => {
+    if (id === 'admin')    return 'text-purple-400';
+    if (id === 'settings') return 'text-cyan-400';
+    if (id === 'referral') return 'text-green-400';
+    return 'text-amber-400';
   };
 
   return (
@@ -141,7 +153,7 @@ export function AppShell() {
               </div>
               {/* Mobile: show current tab name */}
               <div className="sm:hidden flex items-center gap-1.5">
-                <span className="text-amber-400">{currentTab.icon && <span className="[&>svg]:w-4 [&>svg]:h-4">{currentTab.icon}</span>}</span>
+                <span className={mobileIconColour(activeTab, true)}>{currentTab.icon && <span className="[&>svg]:w-4 [&>svg]:h-4">{currentTab.icon}</span>}</span>
                 <span className="font-display font-bold text-white text-sm">{currentTab.label}</span>
               </div>
             </div>
@@ -216,18 +228,12 @@ export function AppShell() {
               className={`w-full flex items-center gap-4 px-5 py-4 text-left transition-all border-l-2 ${mobileActiveColour(tab.id, activeTab === tab.id)}`}>
               <div className={`flex-shrink-0 ${mobileIconColour(tab.id, activeTab === tab.id)}`}>{tab.icon}</div>
               <div className="flex-1 min-w-0">
-                <div className={`font-display font-semibold text-sm ${
-                  activeTab === tab.id
-                    ? tab.id === 'admin' ? 'text-purple-400' : tab.id === 'settings' ? 'text-cyan-400' : 'text-amber-400'
-                    : 'text-gray-200'
-                }`}>{tab.label}</div>
+                <div className={`font-display font-semibold text-sm ${activeTab === tab.id ? activeLabelColour(tab.id) : 'text-gray-200'}`}>
+                  {tab.label}
+                </div>
                 <div className="font-data text-[10px] text-gray-600 mt-0.5">{tab.description}</div>
               </div>
-              <ChevronRight className={`w-4 h-4 flex-shrink-0 ${
-                activeTab === tab.id
-                  ? tab.id === 'admin' ? 'text-purple-400' : tab.id === 'settings' ? 'text-cyan-400' : 'text-amber-400'
-                  : 'text-gray-700'
-              }`} />
+              <ChevronRight className={`w-4 h-4 flex-shrink-0 ${activeTab === tab.id ? activeLabelColour(tab.id) : 'text-gray-700'}`} />
             </button>
           ))}
         </nav>
@@ -257,6 +263,7 @@ export function AppShell() {
           <TradeHistoryTab onJournalCreate={handleJournalCreate} />
         </div>
         <div className={activeTab === 'education'     ? 'block' : 'hidden'}><FuturesBasicsPage /></div>
+        <div className={activeTab === 'referral'      ? 'block' : 'hidden'}><ReferralPage /></div>
         <div className={activeTab === 'settings'      ? 'block' : 'hidden'}><SettingsTab /></div>
         <div className={activeTab === 'admin'         ? 'block' : 'hidden'}>
           {isAdmin && <AdminPage onBack={() => setActiveTab('hot-picks')} />}
