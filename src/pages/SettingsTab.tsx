@@ -1,6 +1,6 @@
 // src/pages/SettingsTab.tsx
 import { useState } from 'react';
-import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, LogOut, Trash2, Crown } from 'lucide-react';
+import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, LogOut, Trash2, Crown, Share2, Copy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -22,6 +22,9 @@ export function SettingsTab() {
   const [delConfirm,  setDelConfirm]  = useState('');
   const [delLoading,  setDelLoading]  = useState(false);
   const [delMsg,      setDelMsg]      = useState<{ ok: boolean; text: string } | null>(null);
+
+  // ── Referral ──────────────────────────────────────────────
+  const [refCopied, setRefCopied] = useState(false);
 
   const handlePasswordChange = async () => {
     setPwMsg(null);
@@ -50,10 +53,30 @@ export function SettingsTab() {
     navigate('/');
   };
 
+  const handleCopyRef = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = referralLink;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setRefCopied(true);
+    setTimeout(() => setRefCopied(false), 2500);
+  };
+
   const isElite = profile?.subscription_tier === 'elite';
   const joinDate = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : '—';
+
+  const referralLink = profile?.referral_code
+    ? `https://www.nxxtfutures.com/signup?ref=${profile.referral_code}`
+    : null;
 
   return (
     <div className="max-w-xl mx-auto px-4 py-8 space-y-4">
@@ -102,6 +125,46 @@ export function SettingsTab() {
             <Crown className="w-4 h-4" />
             Upgrade to Elite — $97/mo
           </button>
+        )}
+      </div>
+
+      {/* ── Referral card ─────────────────────────────────── */}
+      <div className="bg-[#111318] border border-[#1E2128] rounded-2xl overflow-hidden">
+        <button
+          onClick={() => navigate('?tab=referral')}
+          className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/3 transition-colors text-left"
+        >
+          <div className="w-9 h-9 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Share2 className="w-4 h-4 text-green-400" />
+          </div>
+          <div className="flex-1">
+            <div className="font-display font-semibold text-white text-sm">Refer & Earn</div>
+            <div className="text-xs text-gray-500">Earn $25/month for every trader you refer</div>
+          </div>
+          <span className="text-gray-600 text-lg">›</span>
+        </button>
+
+        {/* Quick copy row */}
+        {referralLink && (
+          <div className="px-5 pb-4 border-t border-[#1E2128] pt-3">
+            <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-2">Your referral link</p>
+            <div className="flex gap-2">
+              <div className="flex-1 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg px-3 py-2 text-xs text-gray-400 font-mono truncate">
+                {referralLink}
+              </div>
+              <button
+                onClick={handleCopyRef}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${
+                  refCopied
+                    ? 'bg-green-500/20 border border-green-500/30 text-green-400'
+                    : 'bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300'
+                }`}
+              >
+                {refCopied ? <CheckCircle className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {refCopied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
