@@ -239,7 +239,7 @@ export function AppShell() {
         <div className={activeTab === 'education'     ? 'block' : 'hidden'}><FuturesBasicsPage /></div>
         <div className={activeTab === 'settings'      ? 'block' : 'hidden'}><SettingsTab /></div>
         <div className={activeTab === 'admin'         ? 'block' : 'hidden'}>
-          {isAdmin && <AdminPage />}
+          {isAdmin && <AdminPage onBack={() => setActiveTab('hot-picks')} />}
         </div>
       </main>
 
