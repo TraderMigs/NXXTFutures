@@ -147,7 +147,7 @@ export function SignalCard({ signal, accountBalance, riskPercent }: SignalCardPr
         onClick={() => setShowDetails(!showDetails)}
         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors"
       >
-        {/* Symbol + full name */}
+        {/* Symbol + full name + entry TF */}
         <div className="flex flex-col items-start min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="font-display font-bold text-base text-white">{signal.symbol}</span>
@@ -155,7 +155,14 @@ export function SignalCard({ signal, accountBalance, riskPercent }: SignalCardPr
               <span className="text-[8px] bg-orange-500/15 text-orange-400 border border-orange-500/20 px-1 py-0.5 rounded font-bold">CT</span>
             )}
           </div>
-          <span className="font-data text-[10px] text-gray-600 truncate max-w-[120px]">{config?.fullName}</span>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="font-data text-[10px] text-gray-600 truncate max-w-[120px]">{config?.fullName}</span>
+            {signal.entry_timeframe && (
+              <span className="font-data text-[9px] bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded font-bold tracking-wide">
+                {signal.entry_timeframe.toUpperCase()} ENTRY
+              </span>
+            )}
+          </div>
         </div>
 
         {/* BUY / SELL badge */}
@@ -247,6 +254,19 @@ export function SignalCard({ signal, accountBalance, riskPercent }: SignalCardPr
 
               {/* Price levels */}
               <div className="space-y-1.5">
+                {/* Entry Timeframe — shown prominently so trader knows which chart to open */}
+                {signal.entry_timeframe && (
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-cyan-500/5 rounded-xl border border-cyan-500/20">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="text-xs text-gray-500">Entry Timeframe</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-data text-sm font-bold text-cyan-400">{signal.entry_timeframe.toUpperCase()}</span>
+                      <span className="text-[10px] text-gray-600">— open this chart to enter</span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between px-3 py-2.5 bg-[#0A0B0D] rounded-xl border border-[#1E2128]">
                   <span className="text-xs text-gray-500">Entry Zone</span>
                   <div className="flex items-center">
@@ -397,6 +417,14 @@ export function SignalCard({ signal, accountBalance, riskPercent }: SignalCardPr
                   </NCard>
 
                   <NCard icon={<CheckCircle2 className="w-3.5 h-3.5" />} title="✅ When to Pull the Trigger" color="green">
+                    {signal.entry_timeframe && (
+                      <div className="mb-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/25 rounded-lg flex items-center gap-2">
+                        <BarChart3 className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                        <span className="text-cyan-300 font-bold text-xs">
+                          Open your <span className="text-cyan-400">{signal.entry_timeframe.toUpperCase()} chart</span> to watch for the entry signal.
+                        </span>
+                      </div>
+                    )}
                     {n.confirmation_explained}
                   </NCard>
 
