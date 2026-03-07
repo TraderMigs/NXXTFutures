@@ -536,8 +536,8 @@ export function LandingPage() {
               backdropFilter: 'blur(20px)',
             }}>
             <div className="w-1.5 h-1.5 rounded-full bg-amber-400" style={{ animation: 'breathe 2s ease-in-out infinite' }} />
-            <span style={{ fontFamily: 'DM Mono', fontSize: '11px', color: '#F59E0B', letterSpacing: '1.5px' }}>
-              POWERED BY CLAUDE AI · MOON LANDER DATA
+            <span style={{ fontFamily: 'DM Mono', fontSize: '11px', color: '#F59E0B', letterSpacing: '1.5px', textAlign: 'center', lineHeight: '1.6' }}>
+              NXXT FUTURES ALGO<br />POWERED BY CLAUDE AI
             </span>
           </div>
         </div>
