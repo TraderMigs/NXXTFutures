@@ -171,8 +171,13 @@ export function PaymentSuccessPage() {
             <div className="inline-flex p-4 bg-yellow-500/20 rounded-full mb-6">
               <Zap className="w-10 h-10 text-yellow-400" />
             </div>
-            <h1 className="text-3xl font-bold mb-3">Payment received!</h1>
-            <p className="text-gray-400 mb-6">Your payment was successful. Subscription activation is taking a little longer than usual — it will complete within a minute.</p>
+            <h1 className="text-3xl font-bold mb-3">Subscription not confirmed yet</h1>
+            <p className="text-gray-400 mb-4">We couldn't confirm your subscription status. This can happen if your payment was declined, or if our system is still processing.</p>
+            <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 mb-6 text-left text-sm text-gray-400 space-y-1">
+              <p>• If your card was <span className="text-white">declined</span>, check with your bank and try again.</p>
+              <p>• If your payment <span className="text-white">went through</span>, your Elite access will activate shortly — tap Check Again.</p>
+              <p>• Still stuck? Email us at <span className="text-amber-400">support@nxxtfutures.com</span></p>
+            </div>
             <div className="space-y-3">
               <button
                 onClick={() => { setStatus('processing'); setAttempts(0); pollingRef.current = false; startPolling(); }}
