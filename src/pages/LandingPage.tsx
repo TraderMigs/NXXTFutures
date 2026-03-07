@@ -482,18 +482,11 @@ export function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)' }}>
-              <span style={{ fontFamily: 'Syne', fontWeight: 800, color: '#F59E0B', fontSize: '13px' }}>NF</span>
-            </div>
-            <div>
-              <div style={{ fontFamily: 'Syne', fontWeight: 800, color: 'white', fontSize: '16px', letterSpacing: '-0.5px' }}>
-                NXXT Futures
-              </div>
-              <div style={{ fontFamily: 'DM Mono', fontSize: '9px', color: '#4B5563', letterSpacing: '2px' }}>
-                AI-POWERED · SMC
-              </div>
-            </div>
+            <img
+              src="/icons/logo-header.png"
+              alt="NXXT Futures"
+              style={{ height: '44px', width: 'auto', objectFit: 'contain' }}
+            />
           </div>
 
           <div className="hidden md:flex items-center gap-2">
@@ -953,10 +946,11 @@ export function LandingPage() {
       <footer className="relative py-8 px-6 border-t" style={{ zIndex: 2, borderColor: 'rgba(255,255,255,0.04)' }}>
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-              style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
-              <span style={{ fontFamily: 'Syne', fontWeight: 800, color: '#F59E0B', fontSize: '10px' }}>NF</span>
-            </div>
+            <img
+              src="/icons/logo-header.png"
+              alt="NXXT Futures"
+              style={{ height: '28px', width: 'auto', objectFit: 'contain' }}
+            />
             <span style={{ fontFamily: 'DM Mono', fontSize: '10px', color: '#1F2937', letterSpacing: '1px' }}>
               NXXT FUTURES · NOT FINANCIAL ADVICE · TRADE AT YOUR OWN RISK
             </span>
@@ -970,3 +964,4 @@ export function LandingPage() {
     </div>
   );
 }
+
