@@ -6,4 +6,10 @@ import react from '@vitejs/plugin-react';
 // was fixed in v0.300+. At v0.344.0 this exclusion only slows cold dev startup.
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      // Suppress Deno/edge-runtime jsr: imports that leak from newer @supabase package versions
+      external: (id: string) => id.startsWith('jsr:'),
+    },
+  },
 });
