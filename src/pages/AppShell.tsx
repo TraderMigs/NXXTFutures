@@ -142,17 +142,25 @@ export function AppShell() {
 
             {/* Logo */}
             <div className="flex items-center gap-2.5 flex-shrink-0">
-              <div className="w-8 h-8 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-center">
-                <span className="font-display font-bold text-amber-400 text-xs">NF</span>
-              </div>
+              {/* Desktop: logo image + LIVE badge */}
               <div className="hidden sm:flex items-center gap-2">
-                <span className="font-display font-bold text-white text-sm tracking-tight">NXXT Futures</span>
+                <img
+                  src="/icons/logo-header.png"
+                  alt="NXXT Futures"
+                  className="h-8 w-auto object-contain"
+                  style={{ imageRendering: 'auto' }}
+                />
                 <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] font-data text-emerald-400">
                   <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />LIVE
                 </span>
               </div>
-              {/* Mobile: show current tab name */}
+              {/* Mobile: small logo + current tab name */}
               <div className="sm:hidden flex items-center gap-1.5">
+                <img
+                  src="/icons/logo-header.png"
+                  alt="NXXT Futures"
+                  className="h-6 w-auto object-contain"
+                />
                 <span className={mobileIconColour(activeTab, true)}>{currentTab.icon && <span className="[&>svg]:w-4 [&>svg]:h-4">{currentTab.icon}</span>}</span>
                 <span className="font-display font-bold text-white text-sm">{currentTab.label}</span>
               </div>
@@ -203,11 +211,11 @@ export function AppShell() {
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 h-14 border-b border-[#1E2128] flex-shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-center">
-              <span className="font-display font-bold text-amber-400 text-[10px]">NF</span>
-            </div>
-            <span className="font-display font-bold text-white text-sm">NXXT Futures</span>
-          </div>
+              <img
+                src="/icons/logo-header.png"
+                alt="NXXT Futures"
+                className="h-7 w-auto object-contain"
+              /></div>
           <button onClick={() => setMenuOpen(false)} className="p-1.5 text-gray-600 hover:text-gray-300 transition-all">
             <X className="w-4 h-4" />
           </button>
