@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
 // ─── Position helpers ─────────────────────────────────────────
-const WIDGET_SIZE = 56; // px  (w-14 h-14)
+const WIDGET_SIZE = 45; // px  (was 56, reduced 20%)
 const STORAGE_KEY = 'nxxt_support_pos';
 
 function clamp(val: number, min: number, max: number) {
@@ -132,6 +132,7 @@ export function SupportWidget() {
   // Touch equivalents
   const onTouchMove = useCallback((e: TouchEvent) => {
     if (!drag.current.active) return;
+    e.preventDefault(); // prevents browser scroll hijack during drag
     const touch = e.touches[0];
     const dx = touch.clientX - drag.current.startMouseX;
     const dy = touch.clientY - drag.current.startMouseY;
@@ -221,21 +222,22 @@ export function SupportWidget() {
     <>
       {/* Floating button */}
       <div
-        style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999 }}
+        style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999, touchAction: 'none' }}
         onMouseDown={onMouseDown}
         onTouchStart={onTouchStart}
         className="select-none"
       >
         <div
-          className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl cursor-grab active:cursor-grabbing transition-all duration-200 ${
+          className={`rounded-full flex items-center justify-center shadow-2xl cursor-grab active:cursor-grabbing transition-all duration-200 ${
             open
               ? 'bg-cyan-600 shadow-cyan-500/40'
               : 'bg-[#111318] border-2 border-cyan-500/50 hover:border-cyan-400 hover:shadow-cyan-500/20'
           }`}
+          style={{ width: WIDGET_SIZE, height: WIDGET_SIZE }}
         >
           {open
-            ? <X className="w-5 h-5 text-white pointer-events-none" />
-            : <MessageCircle className="w-6 h-6 text-cyan-400 pointer-events-none" />
+            ? <X className="w-4 h-4 text-white pointer-events-none" />
+            : <MessageCircle className="w-5 h-5 text-cyan-400 pointer-events-none" />
           }
         </div>
 
