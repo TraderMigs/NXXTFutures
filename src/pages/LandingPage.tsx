@@ -607,8 +607,7 @@ export function LandingPage() {
               style={{ background: 'rgba(245,158,11,0.4)', filter: 'blur(20px)', animation: 'pulseRing 2s ease-out infinite' }} />
             <button onClick={() => navigate('/login')}
               className="btn-primary relative px-8 py-4 rounded-2xl font-bold text-black text-lg"
-              style={{ fontFamily: 'Syne', minWidth: '200px', zIndex: 1 }}
-              onClick={() => navigate('/pricing')}>
+              style={{ fontFamily: 'Syne', minWidth: '200px', zIndex: 1 }}>
               <span className="relative z-10 flex items-center gap-2">
                 Enter the Platform
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -924,8 +923,7 @@ export function LandingPage() {
                 style={{ background: 'rgba(245,158,11,0.5)', filter: 'blur(24px)', animation: 'pulseRing 2s ease-out infinite' }} />
               <button onClick={() => navigate('/login')}
                 className="btn-primary relative px-10 py-5 rounded-2xl font-bold text-black text-xl"
-                style={{ fontFamily: 'Syne', zIndex: 1, minWidth: '260px' }}
-                onClick={() => navigate('/pricing')}>
+                style={{ fontFamily: 'Syne', zIndex: 1, minWidth: '260px' }}>
                 <span className="relative z-10">Enter NXXT Futures →</span>
               </button>
             </div>
@@ -964,4 +962,3 @@ export function LandingPage() {
     </div>
   );
 }
-
