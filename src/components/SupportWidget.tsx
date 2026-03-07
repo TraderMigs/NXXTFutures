@@ -173,14 +173,89 @@ export function SupportWidget() {
     }
   };
 
-  // ─── Popup position — flip left/up if near edge ───────────
-  const popupLeft = pos && pos.x > window.innerWidth / 2;
-  const popupTop  = pos && pos.y > window.innerHeight / 2;
+  // ─── Popup position — mobile = fixed centered overlay, desktop = relative to button ──
+  const isMobile    = typeof window !== 'undefined' && window.innerWidth < 640;
+  const popupLeft   = !isMobile && pos && pos.x > window.innerWidth / 2;
+  const popupTop    = !isMobile && pos && pos.y > window.innerHeight / 2;
 
   if (!pos) return null;
 
+  // ─── Mobile popup: fixed centered overlay (backdrop + card) ──
+  const MobilePopup = open && isMobile ? (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      onPointerDown={() => setOpen(false)} // tap backdrop to close
+    >
+      <div
+        className="bg-[#111318] border border-[#2A2D36] rounded-t-2xl shadow-2xl w-full max-w-lg"
+        style={{ maxHeight: '90vh', overflowY: 'auto', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        onPointerDown={e => e.stopPropagation()} // don't close when tapping inside
+      >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-[#1E2128] flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <MessageCircle className="w-4 h-4 text-cyan-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Support</p>
+                  <p className="text-[10px] text-gray-500">We'll get back to you soon</p>
+                </div>
+              </div>
+              <button onPointerDown={() => setOpen(false)} className="p-1.5 text-gray-600 hover:text-gray-300 transition-all">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {success ? (
+              <div className="px-5 py-8 flex flex-col items-center gap-3 text-center">
+                <CheckCircle className="w-12 h-12 text-green-400" />
+                <p className="font-semibold text-white">Ticket Submitted!</p>
+                <p className="text-sm text-gray-400">We'll get back to you soon. This window will close automatically.</p>
+              </div>
+            ) : (
+              <div className="px-5 py-4 space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Email <span className="text-red-400">*</span></label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com"
+                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Category</label>
+                  <select value={category} onChange={e => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50">
+                    <option value="General">General</option>
+                    <option value="Bug Report">Bug Report</option>
+                    <option value="Billing">Billing</option>
+                    <option value="Signal Issue">Signal Issue</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Subject <span className="text-red-400">*</span></label>
+                  <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Brief description..."
+                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Message <span className="text-red-400">*</span></label>
+                  <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Tell us what's going on..." rows={4}
+                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 resize-none" />
+                </div>
+                {formErr && <p className="text-xs text-red-400">{formErr}</p>}
+                <button onClick={handleSubmit} disabled={sending}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-semibold text-white transition-colors">
+                  {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</> : <><Send className="w-4 h-4" /> Submit Ticket</>}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+  ) : null;
+
   return (
     <>
+      {/* Mobile bottom-sheet overlay (rendered outside button so it's never clipped) */}
+      {MobilePopup}
+
       {/* Floating button */}
       <div
         style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999, touchAction: 'none' }}
@@ -201,15 +276,15 @@ export function SupportWidget() {
           }
         </div>
 
-        {/* Popup form — rendered relative to button */}
-        {open && (
+        {/* Desktop popup — relative to button, only on non-mobile */}
+        {open && !isMobile && (
           <div
             className="absolute bg-[#111318] border border-[#2A2D36] rounded-2xl shadow-2xl w-80"
             style={{
               [popupLeft ? 'right' : 'left']: 0,
               [popupTop  ? 'bottom' : 'top']: WIDGET_SIZE + 8,
             }}
-            onPointerDown={e => e.stopPropagation()} // prevent drag while using form
+            onPointerDown={e => e.stopPropagation()}
           >
             {/* Header */}
             <div className="px-5 py-4 border-b border-[#1E2128] flex items-center gap-3">
@@ -221,83 +296,43 @@ export function SupportWidget() {
                 <p className="text-[10px] text-gray-500">We'll get back to you soon</p>
               </div>
             </div>
-
             {success ? (
-              /* Success state */
               <div className="px-5 py-8 flex flex-col items-center gap-3 text-center">
                 <CheckCircle className="w-12 h-12 text-green-400" />
                 <p className="font-semibold text-white">Ticket Submitted!</p>
                 <p className="text-sm text-gray-400">We'll get back to you soon. This window will close automatically.</p>
               </div>
             ) : (
-              /* Form */
               <div className="px-5 py-4 space-y-3">
-                {/* Email */}
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Email <span className="text-red-400">*</span></label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="your@email.com"
-                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50"
-                  />
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com"
+                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
                 </div>
-
-                {/* Category */}
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Category</label>
-                  <select
-                    value={category}
-                    onChange={e => setCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50"
-                  >
+                  <select value={category} onChange={e => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50">
                     <option value="General">General</option>
                     <option value="Bug Report">Bug Report</option>
                     <option value="Billing">Billing</option>
                     <option value="Signal Issue">Signal Issue</option>
                   </select>
                 </div>
-
-                {/* Subject */}
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Subject <span className="text-red-400">*</span></label>
-                  <input
-                    type="text"
-                    value={subject}
-                    onChange={e => setSubject(e.target.value)}
-                    placeholder="Brief description..."
-                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50"
-                  />
+                  <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Brief description..."
+                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
                 </div>
-
-                {/* Message */}
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Message <span className="text-red-400">*</span></label>
-                  <textarea
-                    value={message}
-                    onChange={e => setMessage(e.target.value)}
-                    placeholder="Tell us what's going on..."
-                    rows={3}
-                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 resize-none"
-                  />
+                  <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Tell us what's going on..." rows={3}
+                    className="w-full px-3 py-2 bg-[#0A0B0D] border border-[#2A2D36] rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 resize-none" />
                 </div>
-
-                {/* Error */}
-                {formErr && (
-                  <p className="text-xs text-red-400">{formErr}</p>
-                )}
-
-                {/* Submit */}
-                <button
-                  onClick={handleSubmit}
-                  disabled={sending}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-semibold text-white transition-colors"
-                >
-                  {sending
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
-                    : <><Send className="w-4 h-4" /> Submit Ticket</>
-                  }
+                {formErr && <p className="text-xs text-red-400">{formErr}</p>}
+                <button onClick={handleSubmit} disabled={sending}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-semibold text-white transition-colors">
+                  {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</> : <><Send className="w-4 h-4" /> Submit Ticket</>}
                 </button>
               </div>
             )}
