@@ -1,6 +1,6 @@
 // src/components/SupportWidget.tsx
 // NXXT Futures — Floating Support Widget
-// Phase 2: Draggable circle, available to all users (logged in or out)
+// Draggable via Pointer Events API (unified mouse+touch, no double-fire bug)
 // Position remembered in localStorage. Drag detection prevents accidental opens.
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
 // ─── Position helpers ─────────────────────────────────────────
-const WIDGET_SIZE = 45; // px  (was 56, reduced 20%)
+const WIDGET_SIZE = 45; // px (20% smaller than original 56px)
 const STORAGE_KEY = 'nxxt_support_pos';
 
 function clamp(val: number, min: number, max: number) {
@@ -22,7 +22,6 @@ function getInitialPos(): { x: number; y: number } {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-        // Re-clamp in case viewport changed since last visit
         return {
           x: clamp(parsed.x, 0, window.innerWidth  - WIDGET_SIZE),
           y: clamp(parsed.y, 0, window.innerHeight - WIDGET_SIZE),
@@ -52,17 +51,21 @@ export function SupportWidget() {
   const [category, setCategory] = useState('General');
   const [message,  setMessage]  = useState('');
 
-  // Drag state — tracked in a ref so it never causes re-renders mid-drag
+  // Drag state in refs — never causes re-renders mid-drag
   const drag = useRef({
-    active:  false,
-    moved:   false,
-    startMouseX: 0,
-    startMouseY: 0,
-    startPosX:   0,
-    startPosY:   0,
+    active:   false,
+    moved:    false,
+    startPX:  0, // pointer start X
+    startPY:  0, // pointer start Y
+    startBX:  0, // button start X
+    startBY:  0, // button start Y
   });
 
-  // Initialise position client-side (avoids SSR mismatch)
+  // Keep current pos accessible inside pointer handlers without stale closure
+  const posRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => { posRef.current = pos; }, [pos]);
+
+  // Initialise position client-side
   useEffect(() => {
     setPos(getInitialPos());
   }, []);
@@ -87,89 +90,51 @@ export function SupportWidget() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // ─── Drag handlers ─────────────────────────────────────────
-  const onMouseMove = useCallback((e: MouseEvent) => {
+  // ─── Pointer Events (unified mouse + touch, no double-fire) ──
+  const onPointerMove = useCallback((e: PointerEvent) => {
     if (!drag.current.active) return;
-    const dx = e.clientX - drag.current.startMouseX;
-    const dy = e.clientY - drag.current.startMouseY;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.current.moved = true;
+    const dx = e.clientX - drag.current.startPX;
+    const dy = e.clientY - drag.current.startPY;
+    // 8px threshold — forgiving for finger taps, still catches intentional drag
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) drag.current.moved = true;
     if (!drag.current.moved) return;
     setPos({
-      x: clamp(drag.current.startPosX + dx, 0, window.innerWidth  - WIDGET_SIZE),
-      y: clamp(drag.current.startPosY + dy, 0, window.innerHeight - WIDGET_SIZE),
+      x: clamp(drag.current.startBX + dx, 0, window.innerWidth  - WIDGET_SIZE),
+      y: clamp(drag.current.startBY + dy, 0, window.innerHeight - WIDGET_SIZE),
     });
   }, []);
 
-  const onMouseUp = useCallback((e: MouseEvent) => {
-    window.removeEventListener('mousemove', onMouseMove);
-    window.removeEventListener('mouseup',   onMouseUp);
+  const onPointerUp = useCallback(() => {
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup',   onPointerUp);
     if (drag.current.moved) {
-      // Finished a drag — save position, don't open form
+      // Drag ended — save position, don't open form
       setPos(prev => {
         if (prev) localStorage.setItem(STORAGE_KEY, JSON.stringify(prev));
         return prev;
       });
     } else {
-      // It was a click — open/close the form
+      // Clean tap — toggle form
       setOpen(o => !o);
     }
     drag.current.active = false;
     drag.current.moved  = false;
-  }, [onMouseMove]);
+  }, [onPointerMove]);
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    drag.current.active      = true;
-    drag.current.moved       = false;
-    drag.current.startMouseX = e.clientX;
-    drag.current.startMouseY = e.clientY;
-    drag.current.startPosX   = pos?.x ?? 0;
-    drag.current.startPosY   = pos?.y ?? 0;
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup',   onMouseUp);
-  }, [pos, onMouseMove, onMouseUp]);
-
-  // Touch equivalents
-  const onTouchMove = useCallback((e: TouchEvent) => {
-    if (!drag.current.active) return;
-    e.preventDefault(); // prevents browser scroll hijack during drag
-    const touch = e.touches[0];
-    const dx = touch.clientX - drag.current.startMouseX;
-    const dy = touch.clientY - drag.current.startMouseY;
-    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) drag.current.moved = true; // 10px threshold for touch (was 4px — too sensitive)
-    if (!drag.current.moved) return;
-    setPos({
-      x: clamp(drag.current.startPosX + dx, 0, window.innerWidth  - WIDGET_SIZE),
-      y: clamp(drag.current.startPosY + dy, 0, window.innerHeight - WIDGET_SIZE),
-    });
-  }, []);
-
-  const onTouchEnd = useCallback(() => {
-    window.removeEventListener('touchmove', onTouchMove);
-    window.removeEventListener('touchend',  onTouchEnd);
-    if (drag.current.moved) {
-      setPos(prev => {
-        if (prev) localStorage.setItem(STORAGE_KEY, JSON.stringify(prev));
-        return prev;
-      });
-    } else {
-      setOpen(o => !o);
-    }
-    drag.current.active = false;
-    drag.current.moved  = false;
-  }, [onTouchMove]);
-
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    drag.current.active      = true;
-    drag.current.moved       = false;
-    drag.current.startMouseX = touch.clientX;
-    drag.current.startMouseY = touch.clientY;
-    drag.current.startPosX   = pos?.x ?? 0;
-    drag.current.startPosY   = pos?.y ?? 0;
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('touchend',  onTouchEnd);
-  }, [pos, onTouchMove, onTouchEnd]);
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    // Only handle primary button / first touch point
+    if (!e.isPrimary) return;
+    e.preventDefault(); // prevents compatibility mouse events firing after touch
+    e.currentTarget.setPointerCapture(e.pointerId); // keeps tracking even if pointer leaves element
+    drag.current.active  = true;
+    drag.current.moved   = false;
+    drag.current.startPX = e.clientX;
+    drag.current.startPY = e.clientY;
+    drag.current.startBX = posRef.current?.x ?? 0;
+    drag.current.startBY = posRef.current?.y ?? 0;
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup',   onPointerUp);
+  }, [onPointerMove, onPointerUp]);
 
   // ─── Submit ───────────────────────────────────────────────
   const handleSubmit = async () => {
@@ -177,13 +142,10 @@ export function SupportWidget() {
     if (!email.trim())   { setFormErr('Email is required.');   return; }
     if (!subject.trim()) { setFormErr('Subject is required.');  return; }
     if (!message.trim()) { setFormErr('Message is required.');  return; }
-
-    // Basic email validation
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setFormErr('Please enter a valid email address.');
       return;
     }
-
     setSending(true);
     try {
       const { error } = await supabase.from('support_tickets').insert({
@@ -196,7 +158,6 @@ export function SupportWidget() {
       });
       if (error) throw error;
       setSuccess(true);
-      // Auto-close after 3 seconds
       setTimeout(() => {
         setOpen(false);
         setSuccess(false);
@@ -205,7 +166,7 @@ export function SupportWidget() {
         setMessage('');
         if (!profile?.email) setEmail('');
       }, 3000);
-    } catch (err) {
+    } catch {
       setFormErr('Failed to submit. Please try again.');
     } finally {
       setSending(false);
@@ -216,15 +177,14 @@ export function SupportWidget() {
   const popupLeft = pos && pos.x > window.innerWidth / 2;
   const popupTop  = pos && pos.y > window.innerHeight / 2;
 
-  if (!pos) return null; // wait for client-side mount
+  if (!pos) return null;
 
   return (
     <>
       {/* Floating button */}
       <div
         style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999, touchAction: 'none' }}
-        onMouseDown={onMouseDown}
-        onTouchStart={onTouchStart}
+        onPointerDown={onPointerDown}
         className="select-none"
       >
         <div
@@ -249,8 +209,7 @@ export function SupportWidget() {
               [popupLeft ? 'right' : 'left']: 0,
               [popupTop  ? 'bottom' : 'top']: WIDGET_SIZE + 8,
             }}
-            onMouseDown={e => e.stopPropagation()} // prevent drag while using form
-            onTouchStart={e => e.stopPropagation()} // prevent drag on touch while using form
+            onPointerDown={e => e.stopPropagation()} // prevent drag while using form
           >
             {/* Header */}
             <div className="px-5 py-4 border-b border-[#1E2128] flex items-center gap-3">
