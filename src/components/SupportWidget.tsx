@@ -136,7 +136,7 @@ export function SupportWidget() {
     const touch = e.touches[0];
     const dx = touch.clientX - drag.current.startMouseX;
     const dy = touch.clientY - drag.current.startMouseY;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.current.moved = true;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) drag.current.moved = true; // 10px threshold for touch (was 4px — too sensitive)
     if (!drag.current.moved) return;
     setPos({
       x: clamp(drag.current.startPosX + dx, 0, window.innerWidth  - WIDGET_SIZE),
@@ -250,6 +250,7 @@ export function SupportWidget() {
               [popupTop  ? 'bottom' : 'top']: WIDGET_SIZE + 8,
             }}
             onMouseDown={e => e.stopPropagation()} // prevent drag while using form
+            onTouchStart={e => e.stopPropagation()} // prevent drag on touch while using form
           >
             {/* Header */}
             <div className="px-5 py-4 border-b border-[#1E2128] flex items-center gap-3">
